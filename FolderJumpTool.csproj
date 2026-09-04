@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>FolderJumpTool</RootNamespace>
+    <AssemblyName>FolderJumpTool</AssemblyName>
+
+    <!-- Release 版本元数据；CI 打 tag 时会用 -p:Version=<tag> 覆盖 -->
+    <Version>0.1.0</Version>
+    <Product>FolderJumpTool</Product>
+    <Description>Folder-jump assistant that docks beside Windows file dialogs.</Description>
+    <Authors>Mux6201</Authors>
+    <Copyright>Copyright (c) 2026 Mux6201</Copyright>
+    <RepositoryType>git</RepositoryType>
+
+    <!--
+      如果你需要监听/操作以管理员权限运行的程序弹出的对话框（例如某些安装程序），
+      本程序自身也必须以管理员权限运行，否则 UIPI 会挡住跨权限的窗口访问。
+      需要的话把下面这行取消注释，并额外提供一个 app.manifest 文件。
+    -->
+    <!-- <ApplicationManifest>app.manifest</ApplicationManifest> -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 用于收藏夹的 JSON 序列化，.NET 自带 System.Text.Json，无需额外包 -->
+  </ItemGroup>
+
+</Project>

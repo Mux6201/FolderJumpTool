@@ -1,0 +1,6 @@
+* text=auto
+
+# 脚本/工作流保持 LF，避免 CRLF 引起解析问题
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf

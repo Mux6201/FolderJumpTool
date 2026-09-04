@@ -1,0 +1,49 @@
+# FolderJumpTool
+
+> **中文** | [English](README.en.md) · Inspired by [Listary](https://www.listary.com/)
+
+系统文件对话框的"路径跳转助手"：全局文件选择/保存框弹出时，在旁边挂一个不抢焦点的悬浮窗，点一下即可让对话框跳到目标文件夹——不必再手动敲路径。托盘常驻，轻量无主窗口。
+
+## 特性
+
+- **悬浮窗贴框**：对话框弹出即在旁跟随，靠左 / 居中 / 靠右可配置；自动避让屏幕边缘
+- **候选路径**：打开中的资源管理器窗口（含多标签页，按 Z 序，激活的排最前）+ 最近使用 + 收藏夹
+- **即点即跳**：点目录 → 对话框导航进入；点文件 → 直接选中
+- **收藏夹**：条目行尾星标一键收藏；托盘菜单「收藏夹管理…」可添加 / 删除
+- **Ctrl+G**：悬浮窗可见时，直接跳到首选路径
+- **Everything 搜索（可选）**：配置 es.exe 后在悬浮窗直接搜全盘，回车取第一条
+- **观感**：明暗主题热切换（跟随系统 / 手动）、中英界面、Win11 风格轻量卡片
+
+## 使用
+
+从 **Releases** 下载解压即用（绿色 exe，无需安装）。或者自行构建：
+
+```bash
+git clone https://github.com/Mux6201/FolderJumpTool.git
+cd FolderJumpTool
+dotnet build          # 需要 Windows + .NET 10 SDK
+```
+
+启动后**没有窗口、不弹控制台**，右下角托盘出现蓝色箭头图标即常驻运行。在任意程序按 `Ctrl+O` / `Ctrl+S` 弹文件对话框试试。
+
+### Everything 搜索（可选）
+
+1. 安装 [Everything](https://www.voidtools.com/)（保持后台运行）
+2. 下载官方命令行工具 [es.exe](https://www.voidtools.com/downloads/)（放任意位置即可）
+3. 托盘右键 → **选择 es.exe…** 指定文件；或直接放入 PATH / Everything 安装目录（自动探测）
+
+之后弹文件对话框时，悬浮窗右上角会出现搜索框：输入即搜、**回车**取第一条、**Esc** 清空恢复列表。未配置则不显示。
+
+## 兼容性
+
+Windows 10/11，x64。需要 [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)（Release 自包含版则不需要）。
+
+**已知限制**：以管理员权限运行的程序弹的对话框需要本工具也提权才能操作（UIPI）；Qt / Electron / Java 等自绘对话框不在系统公共对话框模板内，不会触发悬浮窗；多屏不同 DPI 缩放下定位可能有偏差。
+
+## 技术栈
+
+WPF（`.NET 10`，C#）+ Win32 API（`SetWinEventHook` 监听对话框、`WM_SETTEXT` 写路径、DWM 取视觉边界），全程不依赖第三方 NuGet 包。
+
+## License
+
+[MIT](LICENSE)

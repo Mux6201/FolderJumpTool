@@ -1,0 +1,65 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Resolve version from tag
+        id: ver
+        shell: bash
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Publish portable (framework-dependent, single file)
+        run: >-
+          dotnet publish FolderJumpTool.csproj
+          -c Release -r win-x64 --self-contained false
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ steps.ver.outputs.version }}
+          -o publish/portable
+
+      - name: Publish self-contained (single file, no runtime needed)
+        run: >-
+          dotnet publish FolderJumpTool.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version=${{ steps.ver.outputs.version }}
+          -o publish/selfcontained
+
+      - name: Archive artifacts
+        shell: pwsh
+        run: |
+          $v = '${{ steps.ver.outputs.version }}'
+          Compress-Archive -Path publish/portable/FolderJumpTool.exe `
+            -DestinationPath "FolderJumpTool-$v-win-x64-portable.zip" -Force
+          Compress-Archive -Path publish/selfcontained/FolderJumpTool.exe `
+            -DestinationPath "FolderJumpTool-$v-win-x64.zip" -Force
+          Get-FileHash "FolderJumpTool-$v-win-x64-portable.zip","FolderJumpTool-$v-win-x64.zip" -Algorithm SHA256 |
+            ForEach-Object { "{0}  {1}" -f $_.Hash, (Split-Path $_.Path -Leaf) } |
+            Set-Content "FolderJumpTool-$v-SHA256.txt"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            FolderJumpTool-*.zip
+            FolderJumpTool-*-SHA256.txt
+          generate_release_notes: true
+          draft: true

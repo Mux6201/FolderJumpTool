@@ -1,0 +1,22 @@
+# ===== Build outputs =====
+bin/
+obj/
+publish/
+*.user
+*.suo
+
+# ===== IDE =====
+.vs/
+.idea/
+.vscode/
+*.userosscache
+*.sln.docstates
+
+# ===== OS =====
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ===== Local runtime data / personal notes (not for public repo) =====
+.workbuddy/
+settings.json

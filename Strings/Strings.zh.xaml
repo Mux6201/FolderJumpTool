@@ -1,0 +1,49 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- ============ 悬浮窗 ============ -->
+    <sys:String x:Key="Overlay.Title">快速跳转</sys:String>
+    <sys:String x:Key="Overlay.LocationCount">{0} 个位置</sys:String>
+    <sys:String x:Key="Overlay.ResultCount">{0} 条结果</sys:String>
+    <sys:String x:Key="Overlay.SearchHint">搜索 Everything（回车取第一条）</sys:String>
+    <sys:String x:Key="Overlay.EmptyHint">暂无可用文件夹&#x0a;打开几个资源管理器窗口，或编辑收藏夹配置文件</sys:String>
+    <sys:String x:Key="Overlay.NoResults">没有匹配结果</sys:String>
+    <sys:String x:Key="Overlay.AddFav">收藏此路径</sys:String>
+    <sys:String x:Key="Overlay.RemoveFav">取消收藏</sys:String>
+
+    <!-- ============ 托盘 ============ -->
+    <sys:String x:Key="Tray.Tooltip">FolderJumpTool（运行中）</sys:String>
+    <sys:String x:Key="Tray.Header">FolderJumpTool（运行中）</sys:String>
+    <sys:String x:Key="Tray.ThemeSystem">跟随系统主题</sys:String>
+    <sys:String x:Key="Tray.ThemeLight">浅色主题</sys:String>
+    <sys:String x:Key="Tray.ThemeDark">深色主题</sys:String>
+    <sys:String x:Key="Tray.Align">悬浮窗位置</sys:String>
+    <sys:String x:Key="Tray.AlignLeft">靠左</sys:String>
+    <sys:String x:Key="Tray.AlignCenter">居中</sys:String>
+    <sys:String x:Key="Tray.AlignRight">靠右</sys:String>
+    <sys:String x:Key="Tray.Language">语言</sys:String>
+    <sys:String x:Key="Tray.LangSystem">跟随系统</sys:String>
+    <sys:String x:Key="Tray.LangZh">中文</sys:String>
+    <sys:String x:Key="Tray.LangEn">English</sys:String>
+    <sys:String x:Key="Tray.EsNotConfigured">Everything 搜索：未配置 es.exe</sys:String>
+    <sys:String x:Key="Tray.EsEnabled">Everything 搜索：已启用</sys:String>
+    <sys:String x:Key="Tray.ChooseEs">选择 es.exe（Everything 搜索）…</sys:String>
+    <sys:String x:Key="Tray.Exit">退出</sys:String>
+    <sys:String x:Key="Tray.BalloonTitle">FolderJumpTool</sys:String>
+    <sys:String x:Key="Tray.BalloonBody">正在运行：在任意程序按 Ctrl+O / Ctrl+S 试试跳转</sys:String>
+
+    <!-- ============ Everything 配置 ============ -->
+    <sys:String x:Key="Es.ChooseTitle">选择 es.exe（Everything 命令行工具，见 voidtools.com/downloads）</sys:String>
+    <sys:String x:Key="Es.NotUsable">该文件不可用，搜索框未启用</sys:String>
+    <sys:String x:Key="Es.EnabledMsg">Everything 搜索已启用：{0}</sys:String>
+
+    <!-- ============ 收藏夹 ============ -->
+    <sys:String x:Key="Tray.Favorites">收藏夹管理…</sys:String>
+    <sys:String x:Key="Fav.Title">收藏夹</sys:String>
+    <sys:String x:Key="Fav.AddPath">添加路径</sys:String>
+    <sys:String x:Key="Fav.RemoveTooltip">删除收藏</sys:String>
+    <sys:String x:Key="Fav.PickFolder">选择要收藏的文件夹</sys:String>
+    <sys:String x:Key="Fav.Empty">还没有收藏&#x0a;在悬浮窗条目上点星标收藏，或点右上角"添加路径"</sys:String>
+
+</ResourceDictionary>

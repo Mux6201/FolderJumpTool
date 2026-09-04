@@ -1,0 +1,49 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- ============ Overlay ============ -->
+    <sys:String x:Key="Overlay.Title">Quick Jump</sys:String>
+    <sys:String x:Key="Overlay.LocationCount">{0} locations</sys:String>
+    <sys:String x:Key="Overlay.ResultCount">{0} results</sys:String>
+    <sys:String x:Key="Overlay.SearchHint">Search Everything (Enter for top hit)</sys:String>
+    <sys:String x:Key="Overlay.EmptyHint">No folders available&#x0a;Open a few Explorer windows, or edit your favorites file</sys:String>
+    <sys:String x:Key="Overlay.NoResults">No matching results</sys:String>
+    <sys:String x:Key="Overlay.AddFav">Add to favorites</sys:String>
+    <sys:String x:Key="Overlay.RemoveFav">Remove from favorites</sys:String>
+
+    <!-- ============ Tray ============ -->
+    <sys:String x:Key="Tray.Tooltip">FolderJumpTool (Running)</sys:String>
+    <sys:String x:Key="Tray.Header">FolderJumpTool (Running)</sys:String>
+    <sys:String x:Key="Tray.ThemeSystem">Follow system theme</sys:String>
+    <sys:String x:Key="Tray.ThemeLight">Light theme</sys:String>
+    <sys:String x:Key="Tray.ThemeDark">Dark theme</sys:String>
+    <sys:String x:Key="Tray.Align">Overlay position</sys:String>
+    <sys:String x:Key="Tray.AlignLeft">Left</sys:String>
+    <sys:String x:Key="Tray.AlignCenter">Center</sys:String>
+    <sys:String x:Key="Tray.AlignRight">Right</sys:String>
+    <sys:String x:Key="Tray.Language">Language</sys:String>
+    <sys:String x:Key="Tray.LangSystem">Follow system</sys:String>
+    <sys:String x:Key="Tray.LangZh">中文</sys:String>
+    <sys:String x:Key="Tray.LangEn">English</sys:String>
+    <sys:String x:Key="Tray.EsNotConfigured">Everything search: es.exe not configured</sys:String>
+    <sys:String x:Key="Tray.EsEnabled">Everything search: enabled</sys:String>
+    <sys:String x:Key="Tray.ChooseEs">Choose es.exe (Everything search)…</sys:String>
+    <sys:String x:Key="Tray.Exit">Exit</sys:String>
+    <sys:String x:Key="Tray.BalloonTitle">FolderJumpTool</sys:String>
+    <sys:String x:Key="Tray.BalloonBody">Running: press Ctrl+O / Ctrl+S in any app to try jumping</sys:String>
+
+    <!-- ============ Everything config ============ -->
+    <sys:String x:Key="Es.ChooseTitle">Select es.exe (Everything command-line tool; see voidtools.com/downloads)</sys:String>
+    <sys:String x:Key="Es.NotUsable">That file is unusable; search box not enabled</sys:String>
+    <sys:String x:Key="Es.EnabledMsg">Everything search enabled: {0}</sys:String>
+
+    <!-- ============ Favorites ============ -->
+    <sys:String x:Key="Tray.Favorites">Favorites…</sys:String>
+    <sys:String x:Key="Fav.Title">Favorites</sys:String>
+    <sys:String x:Key="Fav.AddPath">Add folder</sys:String>
+    <sys:String x:Key="Fav.RemoveTooltip">Remove favorite</sys:String>
+    <sys:String x:Key="Fav.PickFolder">Pick a folder to favorite</sys:String>
+    <sys:String x:Key="Fav.Empty">No favorites yet&#x0a;Star an entry in the overlay, or use "Add folder"</sys:String>
+
+</ResourceDictionary>
