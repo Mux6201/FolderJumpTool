@@ -4,9 +4,12 @@
 
     <!-- ============ 悬浮窗 ============ -->
     <sys:String x:Key="Overlay.Title">快速跳转</sys:String>
+    <sys:String x:Key="Overlay.TabFavorites">收藏</sys:String>
+    <sys:String x:Key="Overlay.TabRecent">最近</sys:String>
     <sys:String x:Key="Overlay.LocationCount">{0} 个位置</sys:String>
     <sys:String x:Key="Overlay.ResultCount">{0} 条结果</sys:String>
     <sys:String x:Key="Overlay.SearchHint">搜索 Everything（回车取第一条）</sys:String>
+    <sys:String x:Key="Overlay.ClearSearch">清除搜索</sys:String>
     <sys:String x:Key="Overlay.EmptyHint">暂无可用文件夹&#x0a;打开几个资源管理器窗口，或编辑收藏夹配置文件</sys:String>
     <sys:String x:Key="Overlay.NoResults">没有匹配结果</sys:String>
     <sys:String x:Key="Overlay.AddFav">收藏此路径</sys:String>
@@ -43,6 +46,7 @@
     <sys:String x:Key="Fav.Title">收藏夹</sys:String>
     <sys:String x:Key="Fav.AddPath">添加路径</sys:String>
     <sys:String x:Key="Fav.RemoveTooltip">删除收藏</sys:String>
+    <sys:String x:Key="Fav.RenameTooltip">重命名（也可双击名称）</sys:String>
     <sys:String x:Key="Fav.PickFolder">选择要收藏的文件夹</sys:String>
     <sys:String x:Key="Fav.Empty">还没有收藏&#x0a;在悬浮窗条目上点星标收藏，或点右上角"添加路径"</sys:String>
 

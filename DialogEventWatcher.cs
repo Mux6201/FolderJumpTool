@@ -150,10 +150,10 @@ internal sealed class DialogEventWatcher : IDisposable
         if (!IsFileDialogClass(hwnd))
             return;
 
-        if (!DialogNavigator.LooksLikeFileDialog(hwnd))
+        if (!DialogNavigator.IsShellDialog(hwnd))
             return;
 
-        Log.Info($"[FolderJumpTool] 确认是文件对话框，触发 DialogOpened，hwnd={hwnd}");
+        Log.Info($"[FolderJumpTool] 确认是文件/文件夹选择对话框，触发 DialogOpened，hwnd={hwnd}");
         _currentDialog = hwnd;
         DialogOpened?.Invoke(hwnd);
         RaiseMoved(hwnd);
@@ -180,7 +180,7 @@ internal sealed class DialogEventWatcher : IDisposable
         if (_currentDialog != IntPtr.Zero)
             return; // 已经在跟踪一个对话框了，不需要扫
 
-        var found = FindVisibleFileDialog();
+        var found = FindVisibleShellDialog();
         if (found == IntPtr.Zero)
             return;
 
@@ -191,7 +191,7 @@ internal sealed class DialogEventWatcher : IDisposable
         RaiseMoved(found);
     }
 
-    private static IntPtr FindVisibleFileDialog()
+    private static IntPtr FindVisibleShellDialog()
     {
         IntPtr result = IntPtr.Zero;
 
@@ -205,7 +205,7 @@ internal sealed class DialogEventWatcher : IDisposable
             if (sb.ToString() != "#32770")
                 return true;
 
-            if (!DialogNavigator.LooksLikeFileDialog(hwnd))
+            if (!DialogNavigator.IsShellDialog(hwnd))
                 return true;
 
             result = hwnd;

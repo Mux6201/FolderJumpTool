@@ -45,6 +45,36 @@ internal static class RecentFoldersProvider
     }
 
     /// <summary>
+    /// 悬浮窗"最近"页数据源：仅已打开的资源管理器窗口（Z 序）+ 最近使用文件夹，
+    /// 不含收藏夹（收藏走独立页签）。整体去重并封顶。
+    /// </summary>
+    public static List<FavoriteFolder> GetRecentAndExplorer(int maxRecent = 6, int maxTotal = 8)
+    {
+        var result = new List<FavoriteFolder>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AddIfNew(string name, string path)
+        {
+            if (result.Count >= maxTotal)
+                return;
+            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+                return;
+            var normalized = path.TrimEnd('\\');
+            if (!seen.Add(normalized))
+                return;
+            result.Add(new FavoriteFolder { Name = name, Path = normalized });
+        }
+
+        foreach (var (_, path) in GetOpenExplorerFolders())
+            AddIfNew(new DirectoryInfo(path).Name is { Length: > 0 } n ? n : path, path);
+
+        foreach (var path in GetRecentFolders(maxRecent))
+            AddIfNew(new DirectoryInfo(path).Name is { Length: > 0 } n ? n : path, path);
+
+        return result;
+    }
+
+    /// <summary>
     /// 拿到当前所有打开的资源管理器窗口/标签页所在的文件夹路径，返回 (hwnd, path)。
     /// 用 Type.InvokeMember 做 COM 晚绑定（IDispatch），不需要 dynamic / 不需要额外包。
     /// </summary>

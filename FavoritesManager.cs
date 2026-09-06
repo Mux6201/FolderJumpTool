@@ -12,6 +12,11 @@ internal sealed class FavoriteFolder
     /// <summary>仅用于悬浮窗星标显示（该路径当前是否已在收藏夹），不写入 json。</summary>
     [JsonIgnore]
     public bool IsFavorite { get; set; }
+
+    /// <summary>是否目录：候选（收藏/最近/资源管理器）恒为目录，默认 true；
+    /// 搜索结果的文件夹/文件由 EverythingSearch 按磁盘真实类型标注，不写入 json。</summary>
+    [JsonIgnore]
+    public bool IsDirectory { get; set; } = true;
 }
 
 /// <summary>
@@ -89,6 +94,43 @@ internal static class FavoritesManager
         int removed = list.RemoveAll(f => Normalize(f.Path) == n);
         if (removed == 0)
             return false;
+        Save(list);
+        return true;
+    }
+
+    /// <summary>按路径重命名收藏（显示名）。newName 空白时不改，返回 false。</summary>
+    public static bool Rename(string path, string newName)
+    {
+        var name = (newName ?? "").Trim();
+        if (name.Length == 0)
+            return false;
+
+        var list = Load();
+        var n = Normalize(path);
+        var fav = list.FirstOrDefault(f => Normalize(f.Path) == n);
+        if (fav == null)
+            return false;
+
+        fav.Name = name;
+        Save(list);
+        return true;
+    }
+
+    /// <summary>把收藏从 fromIndex 移到 toIndex（toIndex 是"移动前"列表里的插入目标下标，
+    /// 语义与 List.RemoveAt + Insert 一致）。无实际变化或越界返回 false。</summary>
+    public static bool Move(int fromIndex, int toIndex)
+    {
+        var list = Load();
+        if (fromIndex < 0 || fromIndex >= list.Count)
+            return false;
+        if (toIndex < 0 || toIndex > list.Count)
+            return false;
+        if (fromIndex == toIndex || fromIndex + 1 == toIndex)
+            return false; // 移到原位 / 移到紧邻后一位都算没动
+
+        var item = list[fromIndex];
+        list.RemoveAt(fromIndex);
+        list.Insert(toIndex > fromIndex ? toIndex - 1 : toIndex, item);
         Save(list);
         return true;
     }

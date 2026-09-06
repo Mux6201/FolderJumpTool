@@ -7,12 +7,13 @@ A Windows tray utility that docks a tiny non-activating overlay next to system f
 ## Features
 
 - **Overlay beside the dialog**: appears automatically with open/save dialogs; dock left / center / right; stays on screen at screen edges
-- **Candidates**: open Explorer windows (including tabs, Z-ordered with the active one on top) + recent folders + favorites
+- **Candidates**: open Explorer windows (including tabs, Z-ordered with the active one on top) + recent folders; with favorites saved, the list splits into **Recent / Favorites** tabs (Recent is default; no tabs when there are no favorites)
 - **Click to jump**: folder → dialog navigates in; file → dialog selects it
-- **Favorites**: star a row to pin it; tray menu → **Favorites…** to add / remove
+- **Keyboard**: ↑/↓ to move the selection, **Enter** to jump to it (or the top hit)
+- **Favorites**: star a row to pin it; tray menu → **Favorites…** to add / remove / rename inline / drag-reorder
 - **Ctrl+G**: while the overlay is visible, jump straight to the top candidate
-- **Everything search (optional)**: configure es.exe once, then type to search the whole disk from the overlay
-- **Polish**: live light/dark theming, Chinese / English UI, Win11-style flat card
+- **Everything search (optional)**: configure es.exe once, then type to search the whole disk from the overlay (smart ranking puts target folders on top)
+- **Polish**: live light/dark theming, native Windows file-type icons, Chinese / English UI, Win11-style flat card
 
 ## Usage
 
@@ -32,7 +33,7 @@ After launch there is **no window and no console** — a blue arrow tray icon me
 2. Download the official CLI tool [es.exe](https://www.voidtools.com/downloads/)
 3. Tray right-click → **Choose es.exe…**, or drop it on `PATH` / in the Everything install dir (auto-detected)
 
-A search box then appears on the overlay when a dialog opens: type to search, **Enter** for the top hit, **Esc** to clear. Hidden when not configured.
+A search box then appears on the overlay when a dialog opens: type to search (smart ranking: folders first, exact name matches and shallow paths on top), **↑/↓** to select, **Enter** to jump to the selection (or the top hit), **Esc** to clear. Hidden when not configured.
 
 ## Compatibility
 

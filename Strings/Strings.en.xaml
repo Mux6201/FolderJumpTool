@@ -4,9 +4,12 @@
 
     <!-- ============ Overlay ============ -->
     <sys:String x:Key="Overlay.Title">Quick Jump</sys:String>
+    <sys:String x:Key="Overlay.TabFavorites">Favorites</sys:String>
+    <sys:String x:Key="Overlay.TabRecent">Recent</sys:String>
     <sys:String x:Key="Overlay.LocationCount">{0} locations</sys:String>
     <sys:String x:Key="Overlay.ResultCount">{0} results</sys:String>
     <sys:String x:Key="Overlay.SearchHint">Search Everything (Enter for top hit)</sys:String>
+    <sys:String x:Key="Overlay.ClearSearch">Clear search</sys:String>
     <sys:String x:Key="Overlay.EmptyHint">No folders available&#x0a;Open a few Explorer windows, or edit your favorites file</sys:String>
     <sys:String x:Key="Overlay.NoResults">No matching results</sys:String>
     <sys:String x:Key="Overlay.AddFav">Add to favorites</sys:String>
@@ -43,6 +46,7 @@
     <sys:String x:Key="Fav.Title">Favorites</sys:String>
     <sys:String x:Key="Fav.AddPath">Add folder</sys:String>
     <sys:String x:Key="Fav.RemoveTooltip">Remove favorite</sys:String>
+    <sys:String x:Key="Fav.RenameTooltip">Rename (or double-click the name)</sys:String>
     <sys:String x:Key="Fav.PickFolder">Pick a folder to favorite</sys:String>
     <sys:String x:Key="Fav.Empty">No favorites yet&#x0a;Star an entry in the overlay, or use "Add folder"</sys:String>
 

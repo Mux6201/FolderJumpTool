@@ -11,7 +11,22 @@ public partial class App : System.Windows.Application
     private DialogEventWatcher? _watcher;
     private OverlayWindow? _overlay;
     private FavoritesWindow? _favWindow;
-    private bool _dialogIsForeground;
+    /// <summary>当前对话框是否为前台窗口。此标记在 UI 线程（Dispatcher.Invoke）写，
+    /// 但 DialogMoved 等 hook 回调在钩子线程读——跨线程无同步时可能读到陈旧值
+    /// （偶发表现为"拖动对话框悬浮窗不跟随，切一下前后台就好"），故用 volatile 保证可见性。</summary>
+    private volatile bool _dialogIsForeground;
+
+    /// <summary>当前正在跟踪的文件对话框句柄；悬浮窗残留看门狗用它判断对话框是否还活着。</summary>
+    private IntPtr _dialogHwnd = IntPtr.Zero;
+
+    /// <summary>当前跟踪对话框的种类（文件 vs 文件夹选择器），决定搜索过滤与跳转策略。</summary>
+    private DialogKind _dialogKind;
+
+    /// <summary>悬浮窗"残留"兜底：对话框已销毁/隐藏但悬浮窗仍浮在屏幕上时的最后保险。</summary>
+    private readonly System.Windows.Threading.DispatcherTimer _zombieTimer = new()
+    {
+        Interval = TimeSpan.FromMilliseconds(250),
+    };
 
     private WinForms.NotifyIcon? _trayIcon;
     private IntPtr _trayIconHandle;
@@ -92,35 +107,108 @@ public partial class App : System.Windows.Application
         {
             Dispatcher.Invoke(() =>
             {
-                _dialogIsForeground = true; // 刚弹出来的对话框一般就是前台窗口
-                _overlay.RefreshCandidates();
-                // 用视觉矩形（GetVisualRect 剔除 DWM 阴影装饰），悬浮窗贴"看得见的边"
-                if (NativeMethods.GetVisualRect(hwnd, out var rect))
-                    _overlay.FollowDialog(hwnd, rect);
+                _dialogHwnd = hwnd;
+                _dialogKind = DialogNavigator.ClassifyDialog(hwnd);
+                // 全新对话框 = 全新会话：清掉上一个对话框残留的搜索关键词/结果/在途查询，
+                // 回到收藏+最近候选。同一对话框拖动/重回前台时的"搜索结果保留"不在这里，
+                // 走 DialogActivated 的 RefreshForForegroundDialog（下方），互不干扰。
+                _overlay.ResetForNewDialog();
+                _overlay.SetDialogKind(_dialogKind);
+
+                // 只有对话框真的是前台窗口（或它的附属小窗在前台）才立即显示悬浮窗。
+                // 程序启动/兜底扫描会捕获到"开着但被别的窗口盖住"的历史遗留对话框——
+                // 那种情况直接弹会把悬浮窗孤零零顶到最上层（能看到悬浮窗、看不到对话框）。
+                bool isForeground = IsDialogForegroundWindow(hwnd);
+                if (isForeground)
+                {
+                    _dialogIsForeground = true;
+                    // 用视觉矩形（GetVisualRect 剔除 DWM 阴影装饰），悬浮窗贴"看得见的边"
+                    if (NativeMethods.GetVisualRect(hwnd, out var rect))
+                        _overlay.FollowDialog(hwnd, rect);
+                    Log.Info($"[FolderJumpTool] DialogOpened hwnd={hwnd} kind={_dialogKind} 前台=对话框 → 立即显示");
+                }
+                else
+                {
+                    // 对话框此刻在后台：登记状态但不显示，等用户切到它（DialogActivated）
+                    // 时再弹。补一个短延迟复查——对话框刚弹出时前台切换可能晚于捕获事件。
+                    _dialogIsForeground = false;
+                    Log.Info($"[FolderJumpTool] DialogOpened hwnd={hwnd} kind={_dialogKind} 前台≠对话框(后台遗留) → 暂不显示，延迟复查");
+                    DelayedShowIfForeground(hwnd);
+                }
             });
         };
+
+        /// <summary>对话框刚弹出/被捕获时前台可能还没切过来：延迟 300ms 复查一次，
+        /// 是前台才真正显示悬浮窗；仍不是前台则保持隐藏等 DialogActivated。</summary>
+        async void DelayedShowIfForeground(IntPtr hwnd)
+        {
+            await Task.Delay(300);
+            await Dispatcher.InvokeAsync(() =>
+            {
+                if (_dialogHwnd != hwnd || !NativeMethods.IsWindow(hwnd))
+                    return; // 已被更新的对话框替换/已关闭
+                if (!IsDialogForegroundWindow(hwnd))
+                {
+                    Log.Info($"[FolderJumpTool] DialogOpened 延迟复查: hwnd={hwnd} 仍非前台 → 保持隐藏，等 DialogActivated");
+                    return;
+                }
+                _dialogIsForeground = true;
+                if (NativeMethods.GetVisualRect(hwnd, out var rect))
+                    _overlay.FollowDialog(hwnd, rect);
+                Log.Info($"[FolderJumpTool] DialogOpened 延迟复查: hwnd={hwnd} 已是前台 → 显示");
+            });
+        }
+
+        /// <summary>前台窗口是否是目标对话框（或对话框弹出的附属小窗，如重命名输入框）。</summary>
+        bool IsDialogForegroundWindow(IntPtr hwnd)
+        {
+            var fg = NativeMethods.GetForegroundWindow();
+            if (fg == hwnd)
+                return true;
+            return NativeMethods.GetWindow(fg, NativeMethods.GW_OWNER) == hwnd;
+        }
 
         _watcher.DialogMoved += (hwnd, rect) =>
         {
             // 只有对话框还是前台窗口时才跟着重新定位/显示；
             // 否则失焦隐藏之后，这个每 150ms 触发一次的位置同步会把悬浮窗又弹出来。
             if (!_dialogIsForeground)
+            {
+                // 异常态诊断（偶发"拖动不跟随"现场）：对话框明明是前台窗口，
+                // 跟随却被状态闸拦下 = 状态丢失 bug。正常后台场景不打（每 150ms 会刷）。
+                if (IsDialogForegroundWindow(hwnd))
+                {
+                    Log.Info($"[FolderJumpTool] !! DialogMoved 被挡: fg=false 但前台确为对话框 hwnd={hwnd} 前台={NativeMethods.GetForegroundWindow()} overlay可见={_overlay?.IsVisible}");
+                    _dialogIsForeground = true; // 状态自愈：前台确实是对话框，翻回 true
+                }
                 return;
+            }
 
-            Dispatcher.Invoke(() => _overlay.FollowDialog(hwnd, rect));
+            Dispatcher.Invoke(() =>
+            {
+                _dialogHwnd = hwnd;
+                _overlay.FollowDialog(hwnd, rect);
+            });
         };
 
         _watcher.DialogActivated += hwnd =>
         {
             Dispatcher.Invoke(() =>
             {
+                Log.Info($"[FolderJumpTool] DialogActivated hwnd={hwnd} 前状态: fg={_dialogIsForeground} overlay可见={_overlay.IsVisible} 前台={NativeMethods.GetForegroundWindow()}");
                 _dialogIsForeground = true;
+                _dialogHwnd = hwnd;
+                _dialogKind = DialogNavigator.ClassifyDialog(hwnd);
+                _overlay.SetDialogKind(_dialogKind);
                 // 对话框重新回到前台（典型场景：用户去新开了资源管理器窗口/tab 再点回对话框，
                 // 悬浮窗重新出现）——重新抓候选，让新窗口/激活 tab 按 Z 序自动置顶，
                 // 而不是继续显示对话框刚弹出那一刻的旧快照。开销仅几十 ms，低频触发可忽略。
-                _overlay.RefreshCandidates();
+                // 注意：Everything 搜索模式（搜索框有字）下不重刷——否则拖动对话框/悬浮窗
+                // 触发激活事件时，候选列表会把当前搜索结果顶掉。
+                _overlay.RefreshForForegroundDialog();
                 if (NativeMethods.GetVisualRect(hwnd, out var rect))
                     _overlay.FollowDialog(hwnd, rect); // FollowDialog 内部会在需要时重新 Show()
+                Log.Info($"[FolderJumpTool] DialogActivated 处理完: overlay可见={_overlay.IsVisible}");
             });
         };
 
@@ -128,6 +216,16 @@ public partial class App : System.Windows.Application
         {
             Dispatcher.Invoke(() =>
             {
+                // 悬浮窗为 Everything 搜索被用户点击激活（前台就是它自己）时不视为
+                // "对话框失焦"——否则一进搜索框窗口就被隐藏，搜索没法用。
+                if (_overlay is { IsVisible: true } &&
+                    NativeMethods.GetForegroundWindow() == _overlay.NativeHandle)
+                {
+                    Log.Info($"[FolderJumpTool] DialogDeactivated 忽略(前台=悬浮窗，搜索输入中)");
+                    return;
+                }
+
+                Log.Info($"[FolderJumpTool] DialogDeactivated: 前台={NativeMethods.GetForegroundWindow()} overlay可见={_overlay.IsVisible} → 隐藏");
                 _dialogIsForeground = false;
                 _overlay.HideOverlay();
             });
@@ -137,12 +235,37 @@ public partial class App : System.Windows.Application
         {
             Dispatcher.Invoke(() =>
             {
+                Log.Info($"[FolderJumpTool] DialogClosed: overlay可见={_overlay.IsVisible} → 重置会话并隐藏");
                 _dialogIsForeground = false;
+                _dialogHwnd = IntPtr.Zero;
+                // 对话框关闭 = 会话结束：清掉搜索关键词/结果，下次新弹窗从干净状态开始
+                _overlay.ResetForNewDialog();
+                _dialogKind = DialogKind.None;
+                _overlay.SetDialogKind(DialogKind.None);
                 _overlay.HideOverlay();
             });
         };
 
         _watcher.Start();
+
+        // 悬浮窗残留兜底（看门狗）：对话框销毁/隐藏事件的钩子偶有漏网场景，
+        // 只要悬浮窗可见而跟踪的对话框已不在，250ms 内强制隐藏，杜绝
+        // "对话框没了、悬浮窗还钉在屏幕上关不掉"的僵尸窗口。
+        _zombieTimer.Tick += (_, _) =>
+        {
+            if (_overlay == null || !_overlay.IsVisible)
+                return;
+            bool alive = _dialogHwnd != IntPtr.Zero &&
+                         NativeMethods.IsWindow(_dialogHwnd) &&
+                         NativeMethods.IsWindowVisible(_dialogHwnd);
+            if (alive)
+                return;
+            Log.Info($"[FolderJumpTool] 看门狗：对话框已消失 (hwnd={_dialogHwnd})，收起悬浮窗");
+            _dialogHwnd = IntPtr.Zero;
+            _dialogKind = DialogKind.None;
+            _overlay.HideOverlay();
+        };
+        _zombieTimer.Start();
 
         // ShutdownMode 设为 OnExplicitShutdown，因为这是个常驻后台的小工具，
         // 悬浮窗隐藏/显示不应该导致整个 App 退出；退出走托盘菜单 -> Shutdown()。
