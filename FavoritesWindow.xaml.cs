@@ -43,11 +43,16 @@ public partial class FavoritesWindow : Window
     // 行内重命名状态（防 LostFocus 与 Enter/Esc 处理互相重入）
     private bool _editBusy;
 
+    /// <summary>管理窗固定"纯色卡片"外观（SetMaterial 的材质参数被忽略，原因见 ApplyMaterialNow）。
+    /// 只记录明暗，用于 DWM 标题栏/系统边框配色跟随。</summary>
+    private bool _darkTheme;
+
     public FavoritesWindow()
     {
         InitializeComponent();
         _autoScroll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _autoScroll.Tick += AutoScroll_Tick;
+        SourceInitialized += (_, _) => ApplyMaterialNow();
         Reload();
     }
 
@@ -55,6 +60,27 @@ public partial class FavoritesWindow : Window
     {
         _autoScroll.Stop();
         base.OnClosed(e);
+    }
+
+    /// <summary>材质广播入口（App 在启动、托盘菜单切换、主题切换时对两个窗口一起调用）。
+    /// 本窗是带系统标题栏/边框的普通（非分层）窗口，毛玻璃（ACCENT / DWM backdrop）
+    /// 只对无边框分层窗口（悬浮窗 OverlayWindow）有效；非分层窗口上没有真 alpha 通道，
+    /// 半透明 tint 会被 WPF 按黑底合成 → 整窗发黑。因此材质参数在此忽略，
+    /// 恒用不透明卡片色（随主题），只同步标题栏暗色。毛玻璃专属悬浮窗。</summary>
+    public void SetMaterial(WindowMaterial material, bool darkTheme)
+    {
+        _darkTheme = darkTheme;
+        ApplyMaterialNow();
+    }
+
+    /// <summary>把当前主题色落到窗口背景 + 更新 DWM 标题栏配色。
+    /// 背景恒取 Solid 语义：CardBackgroundBrush 不透明画刷（主题热切换时字典重建，
+    /// GetSurfaceBrush 从当前字典取新实例，随浅/深色换白/灰黑）。</summary>
+    private void ApplyMaterialNow()
+    {
+        if (BackdropManager.GetSurfaceBrush(WindowMaterial.Solid) is { } brush)
+            Background = brush;
+        BackdropManager.Apply(this, _darkTheme);
     }
 
     private void Reload()

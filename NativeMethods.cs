@@ -71,7 +71,6 @@ internal static class NativeMethods
 
     public const uint GW_OWNER = 4;
     public const uint GW_HWNDNEXT = 2;
-    public const uint GW_CHILD = 5;
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
@@ -86,18 +85,12 @@ internal static class NativeMethods
     public const int WM_MOUSEACTIVATE = 0x0021;
     public const int MA_NOACTIVATE = 3;
 
-    // 调试用：App 启动默认不再弹控制台（见 App.xaml.cs）。
-    // 需要看实时日志时，临时在 App.OnStartup 里加一行 NativeMethods.AllocConsole() 即可。
-    [DllImport("kernel32.dll")]
-    public static extern bool AllocConsole();
-
     // ---------- 消息发送 ----------
 
     public const uint WM_SETTEXT = 0x000C;
     public const uint WM_GETTEXT = 0x000D;
     public const uint WM_GETTEXTLENGTH = 0x000E;
     public const uint BM_CLICK = 0x00F5;
-    public const uint CB_SHOWDROPDOWN = 0x014F;
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, string lParam);
@@ -149,9 +142,7 @@ internal static class NativeMethods
     // ---------- 悬浮窗不抢焦点用 ----------
 
     public const int GWL_EXSTYLE = -20;
-    public const int WS_EX_NOACTIVATE = 0x08000000;
     public const int WS_EX_TOOLWINDOW = 0x00000080;
-    public const int WS_EX_TOPMOST = 0x00000008;
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern int GetWindowLong(IntPtr hWnd, int nIndex);

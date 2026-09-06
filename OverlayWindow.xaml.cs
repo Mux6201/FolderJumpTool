@@ -22,6 +22,10 @@ public partial class OverlayWindow : Window
     /// <summary>悬浮窗相对文件对话框的水平对齐：Left（靠左，默认）/ Center（居中）/ Right（靠右）。</summary>
     private string _align = "Left";
 
+    /// <summary>当前窗口材质与明暗（托盘"窗口材质"切换；SourceInitialized/切换时应用 DWM）。</summary>
+    private WindowMaterial _material = WindowMaterial.Solid;
+    private bool _darkTheme;
+
     /// <summary>输入去抖：停止打字 220ms 后才真正查询，避免每个字符都拉起 es.exe。</summary>
     private readonly System.Windows.Threading.DispatcherTimer _searchDebounce;
 
@@ -33,6 +37,10 @@ public partial class OverlayWindow : Window
 
     /// <summary>自定义热键 ID（只要进程内唯一、非 0 即可）。</summary>
     private const int HotkeyId = 0x4777;
+
+    /// <summary>用户点了标题行 ×（手动关闭）：请求 App 把当前对话框加入停用名单。
+    /// App 收到后隐藏悬浮窗并记录——被停用的对话框不再触发悬浮窗，直到它关闭自动恢复。</summary>
+    public event Action? DismissRequested;
 
     public OverlayWindow()
     {
@@ -49,16 +57,40 @@ public partial class OverlayWindow : Window
             RunSearch();
         };
 
-        SourceInitialized += (_, _) => ApplyNoActivateStyle();
+        SourceInitialized += (_, _) =>
+        {
+            ApplyNoActivateStyle();
+            ApplyMaterialNow(); // 句柄就绪后补一次材质应用（首次 Show 前 App 已 SetMaterial 存好字段）
+        };
 
         // Ctrl+G 全局热键只在悬浮窗可见时生效：
         // 可见即注册（首选路径直达），隐藏即注销，不干扰其他程序使用 Ctrl+G。
         IsVisibleChanged += (_, e) =>
         {
             if (e.NewValue is true)
+            {
                 RegisterGlobalHotKey();
+                ApplyMaterialNow(); // 窗口实际可见后再应用材质（ACCENT 需窗口显示后才渲染）
+            }
             else
+            {
                 UnregisterGlobalHotKey();
+            }
+        };
+
+        // 窗口自身尺寸变化（输入搜索词 → 条目变长/变多）时按当前对齐重定位：
+        // FollowDialog 只在对话框矩形变化时才被调用，窗口自己变宽它不知道——
+        // 结果就是居中/靠右模式下宽度只向右扩、看起来不居中，要等拖动对话框
+        // 才"跳"回正确位置。置空 _lastRect 绕过短路强制重算（与 SetAlign 同款手法）。
+        SizeChanged += (_, _) =>
+        {
+            if (IsVisible && _targetDialog != IntPtr.Zero &&
+                NativeMethods.IsWindow(_targetDialog) &&
+                NativeMethods.GetVisualRect(_targetDialog, out var rect))
+            {
+                _lastRect = default;
+                FollowDialog(_targetDialog, rect);
+            }
         };
     }
 
@@ -151,7 +183,8 @@ public partial class OverlayWindow : Window
     /// 列表数据源每次重建（换页签/搜索/清空）都要归零，索引对应的行视觉已销毁。</summary>
     private int _navIndex = -1;
 
-    /// <summary>键盘选中行的高亮刷子（主题强调色低透明度，区别于鼠标 hover 的 ItemHoverBrush）。</summary>
+    /// <summary>键盘选中行的高亮刷子（主题 NavHighlightBrush = 强调色低透明度，
+    /// 区别于鼠标 hover 的 ItemHoverBrush；颜色在 Light/Dark 主题里定义，不在此现算）。</summary>
     private System.Windows.Media.SolidColorBrush? _navBrush;
 
     /// <summary>
@@ -438,11 +471,9 @@ public partial class OverlayWindow : Window
             return;
         if (_navBrush == null)
         {
-            var accent = GetBrush("FolderIconHoverBrush") as System.Windows.Media.SolidColorBrush;
-            var c = accent?.Color ?? Colors.DodgerBlue;
-            _navBrush = new System.Windows.Media.SolidColorBrush(
-                System.Windows.Media.Color.FromArgb((byte)46, c.R, c.G, c.B)); // ~18% 透明度
-            _navBrush.Freeze();
+            _navBrush = GetBrush("NavHighlightBrush") as System.Windows.Media.SolidColorBrush;
+            if (_navBrush == null)
+                return; // 主题缺键时不做高亮（正常主题必含，防御兜底）
         }
         btn.Background = _navBrush;
     }
@@ -535,6 +566,50 @@ public partial class OverlayWindow : Window
 
         var source = HwndSource.FromHwnd(hwnd);
         source?.AddHook(WndProcHook);
+    }
+
+    /// <summary>切换窗口材质（纯色/亚克力）。App 在启动、托盘切换、主题切换时调用。</summary>
+    public void SetMaterial(WindowMaterial material, bool darkTheme)
+    {
+        _material = material;
+        _darkTheme = darkTheme;
+        ApplyMaterialNow();
+    }
+
+    /// <summary>
+    /// 把当前材质落到悬浮窗（分层窗口，真 alpha 合成）：
+    ///  Solid：卡片底色 = 不透明 CardBackgroundBrush，清除 ACCENT 模糊；
+    ///  Acrylic：ACCENT 真模糊（SetWindowCompositionAttribute），WPF 层盖半透明 tint
+    ///           （MaterialAcrylicBrush）保证可读——模糊与底色均由 DWM 与 WPF 分层合成。
+    /// 亚克力的内容底切直角 + 不裁 region：ACCENT 模糊作用于整个矩形窗口，
+    /// 圆角底会露出矩形 halo，内容底与模糊同为直角才无轮廓（WPF 自绘圆角只在 Solid 用）。
+    /// </summary>
+    private void ApplyMaterialNow()
+    {
+        System.Windows.Media.Brush? brush = BackdropManager.GetSurfaceBrush(_material);
+        if (brush != null)
+            CardBorder.Background = brush;
+
+        // 搜索框底跟随材质：亚克力用 60% 半透明版（透出玻璃感），纯色用实心版。
+        // SetResourceReference 让键随主题字典重建自动换值（本地赋值会杀死 DynamicResource）。
+        SearchFrame.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty,
+            _material == WindowMaterial.Acrylic ? "AcrylicInputBackgroundBrush" : "InputBackgroundBrush");
+
+        if (_material == WindowMaterial.Acrylic)
+        {
+            // ACCENT tint 直接透传主题画刷原色（alpha 一并取自主题，不再在 code-behind
+            // 二次覆盖）——调透明度只改 Themes/Light.xaml + Dark.xaml 的
+            // MaterialAcrylicBrush alpha 一处即可，WPF 层与 DWM 层自动同步。
+            var c = (brush as System.Windows.Media.SolidColorBrush)?.Color
+                    ?? System.Windows.Media.Color.FromArgb(0x59, 0xFF, 0xFF, 0xFF);
+            BackdropManager.ApplyAcrylicAccent(this, c);
+            CardBorder.CornerRadius = new System.Windows.CornerRadius(0);
+        }
+        else
+        {
+            CardBorder.CornerRadius = new System.Windows.CornerRadius(6);
+            BackdropManager.ClearAcrylic(this);
+        }
     }
 
     /// <summary>窗口消息钩子：WM_MOUSEACTIVATE 时区分点击目标——点击搜索框放行激活
@@ -684,15 +759,42 @@ public partial class OverlayWindow : Window
 
         Left = left;
         Top = top;
-
-        Log.Info(
-            $"[FolderJumpTool] FollowDialog: align={_align} dialogRect=({dialogRect.Left},{dialogRect.Top},{dialogRect.Right},{dialogRect.Bottom}) -> overlay Left={Left}, Top={Top}, ActualWidth={ActualWidth}, ActualHeight={ActualHeight}");
     }
 
     public void HideOverlay()
     {
         Log.Info("[FolderJumpTool] OverlayWindow.HideOverlay() 调用");
         Hide();
+    }
+
+    // ---------- 标题行 × ：手动关闭出口（hover 卡片才淡入，防误判/防残留） ----------
+
+    /// <summary>鼠标进入卡片：× 淡入并可点（80ms，与行内星标手感一致）。</summary>
+    private void Card_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (DismissButton == null || DismissButton.IsHitTestVisible)
+            return; // 已在显示状态，不重复动画
+        DismissButton.IsHitTestVisible = true;
+        DismissButton.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(1, TimeSpan.FromMilliseconds(80)));
+    }
+
+    /// <summary>鼠标离开卡片：× 淡出并禁点（离开窗口即收回，不常驻干扰）。</summary>
+    private void Card_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (DismissButton == null || !DismissButton.IsHitTestVisible)
+            return;
+        DismissButton.IsHitTestVisible = false;
+        DismissButton.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, TimeSpan.FromMilliseconds(80)));
+    }
+
+    /// <summary>点 × ：向 App 请求停用当前对话框（该对话框不再弹悬浮窗，关闭后自动恢复）。
+    /// 这是误判窗口 / 悬浮窗没正常消失时的手动兜底出口，与看门狗互补。</summary>
+    private void Dismiss_Click(object sender, RoutedEventArgs e)
+    {
+        Log.Info("[FolderJumpTool] 标题行 × 点击 → 请求停用当前对话框");
+        DismissRequested?.Invoke();
     }
 
     // ---------- 行 hover：文字加粗 + 图标变色 + 星标出现（事件驱动；DataTemplate.Triggers 的动画在此环境不可靠） ----------
@@ -732,7 +834,8 @@ public partial class OverlayWindow : Window
     }
 
     /// <summary>鼠标进入行：名称变加粗（图标为系统位图不可染色，只做字重反馈）；
-    /// 未收藏的目录行星标淡入弹出（文件行不出星标）。</summary>
+    /// 未收藏的目录行星标淡入弹出（文件行不出星标）。弹入参数收敛：
+    /// BackEase 幅度 0.25 + 从 0.9 起跳（早先 0.35/0.85 弹跳感太强，微调后更克制）。</summary>
     private void Row_MouseEnter(object sender, System.Windows.Input.MouseEventArgs e)
     {
         if (sender is not System.Windows.Controls.Button row)
@@ -740,18 +843,19 @@ public partial class OverlayWindow : Window
 
         SetRowFontWeight(row, isHover: true);
 
-        // 未收藏目录条目：星标淡入 + 0.85→1 弹入
+        // 未收藏目录条目：星标淡入 + 0.9→1 轻弹入
         if (row.DataContext is FavoriteFolder { IsFavorite: false, IsDirectory: true } &&
             FindElement<System.Windows.Controls.Button>(row, "StarButton") is { } star)
         {
             star.IsHitTestVisible = true;
             star.BeginAnimation(OpacityProperty,
-                new DoubleAnimation(1, TimeSpan.FromMilliseconds(90)));
-            AnimateScale(row, "StarScale", 1, 160, from: 0.85, amplitude: 0.35);
+                new DoubleAnimation(1, TimeSpan.FromMilliseconds(80)));
+            AnimateScale(row, "StarScale", 1, 120, from: 0.9, amplitude: 0.25);
         }
     }
 
-    /// <summary>鼠标离开行：字重还原；未收藏目录条目星标淡出收回（收藏常显不动）。</summary>
+    /// <summary>鼠标离开行：字重还原；未收藏目录条目星标淡出收回（收藏常显不动）。
+    /// 收回参数与进入对称：回到 0.9 起点，时长 80ms。</summary>
     private void Row_MouseLeave(object sender, System.Windows.Input.MouseEventArgs e)
     {
         if (sender is not System.Windows.Controls.Button row)
@@ -764,8 +868,8 @@ public partial class OverlayWindow : Window
         {
             star.IsHitTestVisible = false;
             star.BeginAnimation(OpacityProperty,
-                new DoubleAnimation(0, TimeSpan.FromMilliseconds(70)));
-            AnimateScale(row, "StarScale", 0.85, 100);
+                new DoubleAnimation(0, TimeSpan.FromMilliseconds(60)));
+            AnimateScale(row, "StarScale", 0.9, 80);
         }
     }
 

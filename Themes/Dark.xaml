@@ -1,6 +1,11 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!-- 控件样式与明暗无关，抽到共享字典（本字典优先合并，样式内 DynamicResource 引用下面的画刷） -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Styles.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
     <!-- 暗色主题（跟随 Windows 系统暗色，近似 Win11 Acrylic 暗色基调，纯不透明） -->
     <SolidColorBrush x:Key="CardBackgroundBrush" Color="#232323"/>
     <SolidColorBrush x:Key="CardBorderBrush" Color="#3D3D3D"/>
@@ -12,119 +17,23 @@
     <SolidColorBrush x:Key="ItemPressedBrush" Color="#2B4C73"/>
     <SolidColorBrush x:Key="FolderIconBrush" Color="#8F98A3"/>
     <SolidColorBrush x:Key="FolderIconHoverBrush" Color="#4CC2FF"/>
+    <!-- 键盘上下选中行的高亮底：主题强调色 @ ~18% 透明度（与鼠标 hover 的 ItemHoverBrush
+         区分）。颜色在主题里定死，code-behind 只取画刷，不再现算 FromArgb。 -->
+    <SolidColorBrush x:Key="NavHighlightBrush" Color="#2E4CC2FF"/>
     <SolidColorBrush x:Key="InputBackgroundBrush" Color="#2E2E2E"/>
+    <!-- 亚克力态搜索框底：60% 不透明（99）——与半透明卡片同语言；Solid 用实心版 -->
+    <SolidColorBrush x:Key="AcrylicInputBackgroundBrush" Color="#992E2E2E"/>
     <SolidColorBrush x:Key="InputPlaceholderBrush" Color="#7A7A7A"/>
+    <!-- 搜索框内选中文字的高亮底（暗色深蓝，亮色在 Light.xaml 用浅蓝） -->
+    <SolidColorBrush x:Key="TextSelectionBrush" Color="#264F78"/>
+    <!-- 亚克力内容底：半透明 tint（alpha 35% = 59 深）盖在 ACCENT 模糊层上，
+         模糊可见 + 文字尚可读。调透明度只改这一处，WPF 层与 DWM 层自动同步；
+         halo/直角问题由"内容底=矩形"解决（见 OverlayWindow.ApplyMaterialNow）。 -->
+    <SolidColorBrush x:Key="MaterialAcrylicBrush" Color="#59232323"/>
     <!-- 细条滚动条（暗色）：thumb 三段色，轨道透明 -->
     <SolidColorBrush x:Key="ScrollBarThumbBrush" Color="#484848"/>
     <SolidColorBrush x:Key="ScrollBarThumbHoverBrush" Color="#5E5E5E"/>
     <SolidColorBrush x:Key="ScrollBarThumbPressedBrush" Color="#757575"/>
-
-    <Style x:Key="FavoriteItemButtonStyle" TargetType="Button">
-        <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Padding" Value="8,3"/>
-        <Setter Property="HorizontalContentAlignment" Value="Left"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            CornerRadius="4"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="{StaticResource ItemHoverBrush}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter Property="Background" Value="{StaticResource ItemPressedBrush}"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <!-- 细条滚动条（隐式样式，作用于本程序所有 ScrollBar）：
-         无上下箭头按钮、轨道透明、thumb 圆角细条。
-         thumb 颜色走 DynamicResource，主题热切换时一并刷新。
-         当前窗口只有垂直滚动条（HorizontalScrollBarVisibility=Disabled），
-         因此模板按垂直布局设计；宽度 7 = thumb 本体 5 + 两侧 1px 留白。 -->
-    <Style TargetType="ScrollBar">
-        <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Width" Value="7"/>
-        <Setter Property="MinWidth" Value="7"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ScrollBar">
-                    <Grid Background="Transparent">
-                        <Track x:Name="PART_Track" IsDirectionReversed="True">
-                            <Track.DecreaseRepeatButton>
-                                <RepeatButton Command="ScrollBar.PageUpCommand"
-                                              Opacity="0"
-                                              Focusable="False"
-                                              IsTabStop="False"/>
-                            </Track.DecreaseRepeatButton>
-                            <Track.Thumb>
-                                <Thumb Focusable="False" IsTabStop="False">
-                                    <Thumb.Template>
-                                        <ControlTemplate TargetType="Thumb">
-                                            <Border x:Name="ThumbBar"
-                                                    CornerRadius="2.5"
-                                                    Margin="1,1,1,1"
-                                                    MinHeight="24"
-                                                    Background="{DynamicResource ScrollBarThumbBrush}"/>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="ThumbBar" Property="Background"
-                                                            Value="{DynamicResource ScrollBarThumbHoverBrush}"/>
-                                                </Trigger>
-                                                <Trigger Property="IsDragging" Value="True">
-                                                    <Setter TargetName="ThumbBar" Property="Background"
-                                                            Value="{DynamicResource ScrollBarThumbPressedBrush}"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Thumb.Template>
-                                </Thumb>
-                            </Track.Thumb>
-                            <Track.IncreaseRepeatButton>
-                                <RepeatButton Command="ScrollBar.PageDownCommand"
-                                              Opacity="0"
-                                              Focusable="False"
-                                              IsTabStop="False"/>
-                            </Track.IncreaseRepeatButton>
-                        </Track>
-                    </Grid>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <!-- 星标收藏按钮（悬浮窗条目行尾）：默认灰，hover 变主题蓝提示"可收藏"。
-         空心/实心字形与"已在收藏夹"状态由条目 DataTrigger 驱动（见 OverlayWindow.xaml）。 -->
-    <Style x:Key="FavoriteStarButtonStyle" TargetType="Button">
-        <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Width" Value="22"/>
-        <Setter Property="Height" Value="20"/>
-        <Setter Property="Foreground" Value="{DynamicResource PathForegroundBrush}"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}"
-                            CornerRadius="3">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-        <Style.Triggers>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Foreground" Value="{DynamicResource FolderIconHoverBrush}"/>
-            </Trigger>
-        </Style.Triggers>
-    </Style>
 
     <!-- 危险操作前景色（收藏夹管理窗口的删除按钮 hover 等） -->
     <SolidColorBrush x:Key="DangerForegroundBrush" Color="#FF8A80"/>

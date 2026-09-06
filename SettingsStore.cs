@@ -5,7 +5,9 @@ namespace FolderJumpTool;
 
 /// <summary>
 /// 应用设置的读写（%AppData%\FolderJumpTool\settings.json）。
-/// 当前键：themeMode（System/Light/Dark）、esPath（Everything 的 es.exe 完整路径）。
+/// 当前键：themeMode（System/Light/Dark）、windowMaterial（Solid/Acrylic；
+/// 旧版本曾存 Mica，解析失败由调用方回落 Solid）、overlayAlign（Left/Center/Right）、
+/// language（System/zh/en）、searchEnabled（true/false）、esPath（es.exe 完整路径）。
 /// 所有键合并读写：Set 只更新一个键，其余键原样保留，互不覆盖。
 /// </summary>
 internal static class SettingsStore

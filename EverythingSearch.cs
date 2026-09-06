@@ -163,19 +163,6 @@ internal static class EverythingSearch
         if (result.Count > maxResults)
             result = result.GetRange(0, maxResults);
 
-        // 调试日志：确认 app 实际发出的查询与返回（排查"搜不到"类问题用）
-        try
-        {
-            var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FolderJumpTool");
-            Directory.CreateDirectory(dir);
-            var first = result.Count > 0 ? result[0].Path : "(无结果)";
-            File.AppendAllLines(Path.Combine(dir, "es-query.log"), new[]
-            {
-                $"[{DateTime.Now:HH:mm:ss.fff}] 词='{keyword}' foldersOnly={foldersOnly} 原生={hasNativeSyntax} 实际查询='{primary}' 返回{result.Count}条 第一条='{first}'",
-            });
-        }
-        catch { /* 日志失败不影响 */ }
-
         return result;
     }
 

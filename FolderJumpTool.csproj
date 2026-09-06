@@ -11,7 +11,7 @@
     <AssemblyName>FolderJumpTool</AssemblyName>
 
     <!-- Release 版本元数据；CI 打 tag 时会用 -p:Version=<tag> 覆盖 -->
-    <Version>0.1.0</Version>
+    <Version>0.3.0</Version>
     <Product>FolderJumpTool</Product>
     <Description>Folder-jump assistant that docks beside Windows file dialogs.</Description>
     <Authors>Mux6201</Authors>
@@ -24,10 +24,19 @@
       需要的话把下面这行取消注释，并额外提供一个 app.manifest 文件。
     -->
     <!-- <ApplicationManifest>app.manifest</ApplicationManifest> -->
+
+    <!-- 应用图标：嵌入 exe，标题栏/任务栏/资源管理器都从这里取。
+         Assets/app.ico 多尺寸（16/24/32/48/64 BMP 帧 + 128/256 PNG 帧），
+         28% 大圆角矩形蓝底（#0067C0）+ 白箭头，与托盘/收藏夹窗图标同款造型。
+         生成脚本在 obj/icon_gen.py（一次性，不随仓库提交）。 -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 用于收藏夹的 JSON 序列化，.NET 自带 System.Text.Json，无需额外包 -->
+    <!-- 收藏夹窗标题栏专用图标：暖橙大圆角（与全局 app.ico 同款造型、不同配色），
+         作为 Resource 嵌进程序集，XAML 用 pack URI "/Assets/favorites-window.ico" 取。
+         生成脚本在 obj/icon_favorites.py（一次性，不随仓库提交）。 -->
+    <Resource Include="Assets\favorites-window.ico" />
   </ItemGroup>
 
 </Project>

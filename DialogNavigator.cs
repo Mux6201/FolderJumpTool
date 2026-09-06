@@ -50,6 +50,7 @@ internal static class DialogNavigator
     {
         var btnTexts = new List<string>();
         bool hasTree = false;
+        bool hasTab = false;
         var comboEx = NativeMethods.GetDlgItem(hwnd, FILENAME_COMBO_ID);
         var cancelBtn = NativeMethods.GetDlgItem(hwnd, IDCANCEL);
         bool hasFileNameBox = comboEx != IntPtr.Zero && cancelBtn != IntPtr.Zero;
@@ -62,6 +63,8 @@ internal static class DialogNavigator
 
             if (className == "SysTreeView32")
                 hasTree = true;
+            if (className == "SysTabControl32")
+                hasTab = true;
 
             var txt = new StringBuilder(512);
             NativeMethods.GetWindowText(child, txt, txt.Capacity);
@@ -91,7 +94,12 @@ internal static class DialogNavigator
 
         // ③ 老式树形浏览选择文件夹（SHBrowseForFolder，含"文件夹:"输入框变体
         //    BIF_NEWDIALOGSTYLE —— 树 + Edit 并存）
-        if (hasTree)
+        //    守卫：真 SHBrowseForFolder 绝无 SysTabControl32、绝无"应用/Apply"按钮
+        //    （只可能是 确定/取消/新建文件夹）。而很多程序的"选项/设置"窗口也是
+        //    #32770 + SysTreeView32 导航树（典型：Everything 选项窗左侧设置树），
+        //    若不排除会把它们误判成文件夹选择器、把悬浮窗弹出来。
+        if (hasTree && !hasTab && !btnTexts.Any(t =>
+                t.Replace("&", "") is "应用" or "Apply"))
             return DialogKind.FolderPicker;
 
         return DialogKind.None;
@@ -164,24 +172,6 @@ internal static class DialogNavigator
 
     /// <summary>是否是系统文件/文件夹选择对话框（watcher 的捕获过滤条件）。</summary>
     public static bool IsShellDialog(IntPtr hwnd) => ClassifyDialog(hwnd) != DialogKind.None;
-
-    /// <summary>枚举直接子窗口，判断是否存在指定类名的控件。</summary>
-    private static bool HasChildOfClass(IntPtr hwnd, string className)
-    {
-        bool found = false;
-        NativeMethods.EnumChildWindows(hwnd, (child, _) =>
-        {
-            var sb = new StringBuilder(256);
-            NativeMethods.GetClassName(child, sb, sb.Capacity);
-            if (sb.ToString() == className)
-            {
-                found = true;
-                return false; // 找到即停
-            }
-            return true;
-        }, IntPtr.Zero);
-        return found;
-    }
 
     /// <summary>
     /// 尝试找到真正接收文本输入的 Edit 控件。

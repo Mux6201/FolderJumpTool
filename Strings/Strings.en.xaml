@@ -7,20 +7,25 @@
     <sys:String x:Key="Overlay.TabFavorites">Favorites</sys:String>
     <sys:String x:Key="Overlay.TabRecent">Recent</sys:String>
     <sys:String x:Key="Overlay.LocationCount">{0} locations</sys:String>
-    <sys:String x:Key="Overlay.ResultCount">{0} results</sys:String>
     <sys:String x:Key="Overlay.SearchHint">Search Everything (Enter for top hit)</sys:String>
     <sys:String x:Key="Overlay.ClearSearch">Clear search</sys:String>
     <sys:String x:Key="Overlay.EmptyHint">No folders available&#x0a;Open a few Explorer windows, or edit your favorites file</sys:String>
     <sys:String x:Key="Overlay.NoResults">No matching results</sys:String>
     <sys:String x:Key="Overlay.AddFav">Add to favorites</sys:String>
     <sys:String x:Key="Overlay.RemoveFav">Remove from favorites</sys:String>
+    <sys:String x:Key="Overlay.Dismiss">Dismiss this overlay (won't show for this dialog until it closes)</sys:String>
 
     <!-- ============ Tray ============ -->
-    <sys:String x:Key="Tray.Tooltip">FolderJumpTool (Running)</sys:String>
-    <sys:String x:Key="Tray.Header">FolderJumpTool (Running)</sys:String>
+    <sys:String x:Key="Tray.Tooltip">FolderJumpTool</sys:String>
+    <sys:String x:Key="Tray.Header">FolderJumpTool</sys:String>
+    <sys:String x:Key="Tray.Theme">Theme</sys:String>
     <sys:String x:Key="Tray.ThemeSystem">Follow system theme</sys:String>
     <sys:String x:Key="Tray.ThemeLight">Light theme</sys:String>
     <sys:String x:Key="Tray.ThemeDark">Dark theme</sys:String>
+    <sys:String x:Key="Tray.Material">Window material</sys:String>
+    <sys:String x:Key="Tray.MaterialSolid">Solid</sys:String>
+    <sys:String x:Key="Tray.MaterialAcrylic">Acrylic</sys:String>
+    <sys:String x:Key="Tray.MaterialUnsupported">Requires Windows 10 1607 or later</sys:String>
     <sys:String x:Key="Tray.Align">Overlay position</sys:String>
     <sys:String x:Key="Tray.AlignLeft">Left</sys:String>
     <sys:String x:Key="Tray.AlignCenter">Center</sys:String>
@@ -29,9 +34,14 @@
     <sys:String x:Key="Tray.LangSystem">Follow system</sys:String>
     <sys:String x:Key="Tray.LangZh">中文</sys:String>
     <sys:String x:Key="Tray.LangEn">English</sys:String>
+    <sys:String x:Key="Tray.Search">Everything search</sys:String>
+    <sys:String x:Key="Tray.SearchToggle">Show search box</sys:String>
+    <sys:String x:Key="Tray.SearchToggleTip">Current es.exe: {0}</sys:String>
+    <sys:String x:Key="Tray.SearchToggleTipNoEs">es.exe not configured; choose one first</sys:String>
     <sys:String x:Key="Tray.EsNotConfigured">Everything search: es.exe not configured</sys:String>
     <sys:String x:Key="Tray.EsEnabled">Everything search: enabled</sys:String>
-    <sys:String x:Key="Tray.ChooseEs">Choose es.exe (Everything search)…</sys:String>
+    <sys:String x:Key="Tray.EsHidden">Everything search: search box hidden</sys:String>
+    <sys:String x:Key="Tray.ChooseEs">Choose es.exe…</sys:String>
     <sys:String x:Key="Tray.Exit">Exit</sys:String>
     <sys:String x:Key="Tray.BalloonTitle">FolderJumpTool</sys:String>
     <sys:String x:Key="Tray.BalloonBody">Running: press Ctrl+O / Ctrl+S in any app to try jumping</sys:String>

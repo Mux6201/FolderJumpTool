@@ -9,6 +9,7 @@
         MinHeight="300"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource CardBackgroundBrush}"
+        Icon="/Assets/favorites-window.ico"
         FontSize="13"
         UseLayoutRounding="True"
         SnapsToDevicePixels="True">
@@ -46,7 +47,8 @@
             </Style.Triggers>
         </Style>
 
-        <!-- 行内图标按钮（重命名/删除共用骨架）：默认灰，hover 各自变色 -->
+        <!-- 行内图标按钮（重命名/删除共用骨架）：默认灰，hover 各自变色
+             圆角 4 与其它控件统一（主按钮 4 / 行 hover 4 / 星标 4） -->
         <Style x:Key="IconButtonBaseStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -59,7 +61,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}"
-                                CornerRadius="3">
+                                CornerRadius="4">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                         </Border>
@@ -150,6 +152,20 @@
                                       MouseLeftButtonDown="Row_MouseDown"
                                       MouseMove="Row_MouseMove"
                                       MouseUp="Row_MouseUp">
+                                    <!-- 行 hover 反馈：浅蓝底色与悬浮窗行一致（ItemHoverBrush）。
+                                         行是拖拽宿主（纯 Grid），用 Style 触发器实现，
+                                         不引入额外 Border/事件，不影响 MouseDown/Move/Up 拖拽链。 -->
+                                    <Grid.Style>
+                                        <Style TargetType="Grid">
+                                            <Setter Property="Background" Value="Transparent"/>
+                                            <Style.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter Property="Background"
+                                                            Value="{DynamicResource ItemHoverBrush}"/>
+                                                </Trigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Grid.Style>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>

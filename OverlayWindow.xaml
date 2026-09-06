@@ -32,7 +32,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}"
-                                CornerRadius="3">
+                                CornerRadius="4">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                         </Border>
@@ -72,24 +72,32 @@
     </Window.Resources>
 
     <!--
-        卡片本体 = 窗口内容，不留 Margin/阴影：
-        之前 Border Margin=16 + DropShadow 会让"白卡片"视觉上比窗口框退后十几像素，
-        结果悬浮窗明明贴着对话框框定位，看起来却隔着一截"空气"且左缘对不齐。
-        现在卡片四周没有透明留白，窗口框即视觉边缘，定位所见即所得。
+        卡片本体：分层窗口（AllowsTransparency）内自绘圆角卡片。
+        Solid：CardBackgroundBrush 不透明色（默认观感）。
+        Acrylic：ACCENT 亚克力真模糊（SetWindowCompositionAttribute），
+                此 Border 背景用半透明 tint 盖在模糊层上保证可读（内容底切直角，
+                ACCENT 模糊为矩形，直角能避免圆角外的模糊 halo）。
+        背景/描边由 ApplyMaterialNow 按材质切换（x:Name=CardBorder）。
     -->
-    <Border Background="{DynamicResource CardBackgroundBrush}"
+    <Border x:Name="CardBorder"
+            Padding="6"
             CornerRadius="6"
-            BorderBrush="{DynamicResource CardBorderBrush}"
             BorderThickness="1"
-            Padding="6">
+            BorderBrush="{DynamicResource CardBorderBrush}"
+            Background="{DynamicResource CardBackgroundBrush}"
+            MouseEnter="Card_MouseEnter"
+            MouseLeave="Card_MouseLeave">
 
         <StackPanel Orientation="Vertical" MinWidth="400" MaxWidth="640">
             <!-- 标题行：左"快速跳转"，右侧候选数提示（搜索模式下自动隐藏）。
-                 搜索框不挤在这里——占满整行的独立搜索条更有呼吸感。 -->
+                 最右的 × 是"手动退出"出口：平时完全透明不可点，
+                 hover 卡片任意处才淡入——用于误判窗口/悬浮窗没正常消失时
+                 手动停用（点 × 后该对话框不再弹悬浮窗，直到它关闭自动恢复）。 -->
             <Grid Margin="6,2,6,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="{DynamicResource Overlay.Title}"
                            FontSize="12"
@@ -101,7 +109,22 @@
                            HorizontalAlignment="Right"
                            VerticalAlignment="Center"
                            Visibility="Collapsed"
+                           Margin="0,0,6,0"
                            Foreground="{DynamicResource PathForegroundBrush}"/>
+                <!-- 手动关闭按钮：Opacity 0 + 不可命中（hover 卡片淡入后可点），
+                     样式复用搜索辅助按钮（无边框小圆角、hover 淡蓝底 + 蓝字形）。 -->
+                <Button x:Name="DismissButton"
+                        Grid.Column="2"
+                        Style="{StaticResource SearchActionButtonStyle}"
+                        ToolTip="{DynamicResource Overlay.Dismiss}"
+                        Click="Dismiss_Click"
+                        Opacity="0"
+                        IsHitTestVisible="False"
+                        VerticalAlignment="Center">
+                    <TextBlock FontFamily="Segoe MDL2 Assets"
+                               FontSize="9"
+                               Text="&#xE711;"/>
+                </Button>
             </Grid>
 
             <!-- 搜索行：整行宽度的扁平搜索条（未配置 es.exe 时整行折叠，界面与纯收藏版一致）。
@@ -112,7 +135,7 @@
                   Visibility="Collapsed">
                 <Border x:Name="SearchFrame"
                         Height="26"
-                        CornerRadius="5"
+                        CornerRadius="4"
                         Background="{DynamicResource InputBackgroundBrush}"
                         BorderBrush="{DynamicResource CardBorderBrush}"
                         BorderThickness="1">
@@ -142,7 +165,7 @@
                                      FontSize="12"
                                      CaretBrush="{DynamicResource TextMainBrush}"
                                      Foreground="{DynamicResource TextMainBrush}"
-                                     SelectionBrush="#B5D4F4"
+                                     SelectionBrush="{DynamicResource TextSelectionBrush}"
                                      TextChanged="SearchBox_TextChanged"
                                      PreviewKeyDown="SearchBox_KeyDown"
                                      PreviewMouseLeftButtonDown="SearchBox_MouseDown"
