@@ -11,7 +11,7 @@
     <AssemblyName>FolderJumpTool</AssemblyName>
 
     <!-- Release 版本元数据；CI 打 tag 时会用 -p:Version=<tag> 覆盖 -->
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Product>FolderJumpTool</Product>
     <Description>Folder-jump assistant that docks beside Windows file dialogs.</Description>
     <Authors>Mux6201</Authors>
