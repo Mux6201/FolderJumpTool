@@ -45,6 +45,7 @@
     <sys:String x:Key="Tray.ChooseEs">Choose es.exe…</sys:String>
     <sys:String x:Key="Tray.History">Browsing history</sys:String>
     <sys:String x:Key="Tray.HistoryToggle">Show history tab</sys:String>
+    <sys:String x:Key="Tray.AutoStart">Start with Windows</sys:String>
     <sys:String x:Key="Tray.Exit">Exit</sys:String>
     <sys:String x:Key="Tray.BalloonTitle">FolderJumpTool</sys:String>
     <sys:String x:Key="Tray.BalloonBody">Running: press Ctrl+O / Ctrl+S in any app to try jumping</sys:String>

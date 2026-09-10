@@ -45,6 +45,7 @@
     <sys:String x:Key="Tray.ChooseEs">选择 es.exe…</sys:String>
     <sys:String x:Key="Tray.History">浏览历史</sys:String>
     <sys:String x:Key="Tray.HistoryToggle">显示历史页签</sys:String>
+    <sys:String x:Key="Tray.AutoStart">开机自动启动</sys:String>
     <sys:String x:Key="Tray.Exit">退出</sys:String>
     <sys:String x:Key="Tray.BalloonTitle">FolderJumpTool</sys:String>
     <sys:String x:Key="Tray.BalloonBody">正在运行：在任意程序按 Ctrl+O / Ctrl+S 试试跳转</sys:String>

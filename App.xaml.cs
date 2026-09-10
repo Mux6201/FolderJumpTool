@@ -82,6 +82,7 @@ public partial class App : System.Windows.Application
     private WinForms.ToolStripMenuItem? _menuChooseEs;
     private WinForms.ToolStripMenuItem? _menuHistoryGroup;
     private WinForms.ToolStripMenuItem? _menuHistoryToggle;
+    private WinForms.ToolStripMenuItem? _menuAutoStart;
     private WinForms.ToolStripMenuItem? _menuExit;
 
     /// <summary>Everything 搜索框是否显示（托盘"Everything 搜索"开关）。
@@ -162,6 +163,9 @@ public partial class App : System.Windows.Application
         // showHistoryTab 只管"历史"页签显不显示，关掉页签不会丢历史。
         _showHistoryTab = SettingsStore.Get("showHistoryTab", "true") != "false";
         _overlay.ShowHistoryTab(_showHistoryTab);
+
+        // 开机自启：已开启时校准注册表里的 exe 路径（程序被移动/更新后旧路径会失效）。
+        AutoStartManager.SyncPathIfEnabled();
 
         // 系统托盘图标：常驻右下角，左键单击弹运行提示，
         // 右键菜单：主题切换（跟随系统/浅色/深色）+ 退出。
@@ -499,6 +503,16 @@ public partial class App : System.Windows.Application
             new WinForms.ToolStripItem[] { _menuLangSystem, _menuLangZh, _menuLangEn });
         menu.Items.Add(_menuLangGroup);
 
+        // 开机自动启动开关（HKCU Run 项，无需管理员权限；任务管理器启动页可管理）。
+        // 程序被移动/更新后路径会失效，启动时由 SyncPathIfEnabled 自动校准。
+        _menuAutoStart = new WinForms.ToolStripMenuItem(S("Tray.AutoStart"))
+        {
+            CheckOnClick = true,
+            Checked = AutoStartManager.IsEnabled(),
+        };
+        _menuAutoStart.Click += OnAutoStartToggleClick;
+        menu.Items.Add(_menuAutoStart);
+
         menu.Items.Add(new WinForms.ToolStripSeparator());
         _menuExit = new WinForms.ToolStripMenuItem(S("Tray.Exit"), null, (_, _) => Shutdown());
         menu.Items.Add(_menuExit);
@@ -660,6 +674,17 @@ public partial class App : System.Windows.Application
         SettingsStore.Set("showHistoryTab", _showHistoryTab ? "true" : "false");
         _overlay?.ShowHistoryTab(_showHistoryTab);
         Log.Info($"[FolderJumpTool] 历史页签: {(_showHistoryTab ? "显示" : "隐藏")}");
+    }
+
+    /// <summary>开机自动启动开关：写入/删除 HKCU Run 项，然后回读真实状态刷新勾选
+    /// （注册表可能受组策略限制写不进去，回读保证菜单勾选与实际一致）。</summary>
+    private void OnAutoStartToggleClick(object? sender, EventArgs e)
+    {
+        bool enable = _menuAutoStart is { Checked: true };
+        AutoStartManager.SetEnabled(enable);
+        if (_menuAutoStart != null)
+            _menuAutoStart.Checked = AutoStartManager.IsEnabled();
+        Log.Info($"[FolderJumpTool] 开机自动启动: {(_menuAutoStart?.Checked == true ? "开" : "关")}");
     }
 
     /// <summary>Everything 搜索开关点击：切换搜索框显示并持久化（es.exe 未配置时开关不可用）。</summary>
@@ -891,6 +916,8 @@ public partial class App : System.Windows.Application
             _menuHistoryGroup.Text = S("Tray.History");
         if (_menuHistoryToggle != null)
             _menuHistoryToggle.Text = S("Tray.HistoryToggle");
+        if (_menuAutoStart != null)
+            _menuAutoStart.Text = S("Tray.AutoStart");
         if (_menuLangGroup != null)
             _menuLangGroup.Text = S("Tray.Language");
         if (_menuLangSystem != null)
