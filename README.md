@@ -8,24 +8,46 @@
 
 - **悬浮窗贴框**：对话框弹出即在旁跟随，靠左 / 居中 / 靠右可配置；自动避让屏幕边缘
 - **手动出口（×）**：标题行右上角 ×（悬停卡片才出现）——误判窗口 / 悬浮窗没正常消失时点它，该对话框关闭前不再弹悬浮窗，关闭后自动恢复
-- **候选路径**：打开中的资源管理器窗口（含多标签页，按 Z 序，激活的排最前）+ 最近使用；有收藏后分「最近 / 收藏」页签（默认最近，无收藏保持单列表）
+- **候选路径**：打开中的资源管理器窗口（含多标签页，按 Z 序，激活的排最前）+ 最近使用；列表行显示"名称 + 所在目录"，悬停可看完整路径
+- **三个页签**：「最近」（当前打开的窗口 + 最近使用）／「收藏」／「历史」（自动记录的浏览历史——关掉的文件夹也能找回），后两个按数据出现
+- **浏览历史**：后台自动记录浏览过的文件夹（打开资源管理器窗口、窗口内导航、用悬浮窗跳转都会记录），窗口关掉后仍能在「历史」页找回；托盘可关闭历史页签的显示（记录不受影响）
+- **开机自动启动**：托盘一键开关（写入当前用户启动项，任务管理器 / 系统设置里同样可见可管；程序移动或升级后路径自动校准）
 - **即点即跳**：点目录 → 对话框导航进入；点文件 → 直接选中
 - **键盘操作**：搜索结果与候选列表支持 **↑/↓ 选行、Enter 跳转选中项 / 取第一条**
 - **收藏夹**：条目行尾星标一键收藏；托盘「收藏夹管理…」支持添加 / 删除 / 行内重命名 / 拖拽排序
 - **Ctrl+G**：悬浮窗可见时，直接跳到首选路径
 - **Everything 搜索（可选）**：配置 es.exe 后在悬浮窗直接搜全盘，智能排序把目标目录置顶；托盘可随时开关搜索框
-- **托盘菜单**：主题（跟随系统 / 浅 / 深）、窗口材质（纯色 / 亚克力）、悬浮窗位置、Everything 搜索、语言——全部即时切换并记住
+- **托盘菜单**：主题（跟随系统 / 浅 / 深）、窗口材质（纯色 / 亚克力）、悬浮窗位置、Everything 搜索、浏览历史、语言、开机自动启动——全部即时切换并记住
 - **观感**：明暗主题热切换、**亚克力毛玻璃材质**（悬浮窗，Win10 1607+）、Windows 原生文件类型图标、中英界面、Win11 风格轻量卡片、配套整套应用图标
 
 ## 使用
 
-从 **Releases** 下载解压即用（绿色 exe，无需安装）。或者自行构建：
+从 **Releases** 下载解压即用（绿色 exe，无需安装）。
+
+### 本地构建
+
+需要 Windows + [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)：
 
 ```bash
 git clone https://github.com/Mux6201/FolderJumpTool.git
 cd FolderJumpTool
-dotnet build          # 需要 Windows + .NET 10 SDK
+dotnet run                # 直接运行（开发用）
+dotnet build -c Release   # 只编译
 ```
+
+### 打包发布版（与 CI 产出一致）
+
+```bash
+# 框架依赖：体积小，需装 .NET 10 Desktop Runtime
+dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained false \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/portable
+
+# 自包含：免运行环境，体积大
+dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained true \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/selfcontained
+```
+
+不想本地配环境也可以直接出产物：GitHub → **Actions** → 左侧 **release** → **Run workflow** → 填版本号，跑完在该运行页面的 **Artifacts** 里下载。正式发版则推送 `v*` 标签（自动构建并创建 draft Release）。
 
 启动后**没有窗口、不弹控制台**，右下角托盘出现蓝色圆角方块箭头图标即常驻运行。托盘右键菜单可切换主题、窗口材质、悬浮窗位置与语言。在任意程序按 `Ctrl+O` / `Ctrl+S` 弹文件对话框试试。
 

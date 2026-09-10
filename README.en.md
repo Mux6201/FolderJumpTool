@@ -8,24 +8,46 @@ A Windows tray utility that docks a tiny non-activating overlay next to system f
 
 - **Overlay beside the dialog**: appears automatically with open/save dialogs; dock left / center / right; stays on screen at screen edges
 - **Manual dismiss (×)**: a × fades in on the title row when you hover the card — click it to suppress the overlay for a misfired dialog (no overlay for it until it closes, then it auto-recovers)
-- **Candidates**: open Explorer windows (including tabs, Z-ordered with the active one on top) + recent folders; with favorites saved, the list splits into **Recent / Favorites** tabs (Recent is default; no tabs when there are no favorites)
+- **Candidates**: open Explorer windows (including tabs, Z-ordered with the active one on top) + recent folders; each row shows the name plus its parent folder (hover for the full path)
+- **Three tabs**: Recent (open windows + recently used) / Favorites / History (automatically recorded browsing history — folders you already closed are still there); the latter two appear when they have data
+- **Browsing history**: recorded in the background (opening Explorer windows, navigating into subfolders, and every jump you make from the overlay); closed folders stay recoverable on the History tab. The tray menu can hide the tab — recording continues either way
+- **Start with Windows**: one tray toggle (writes the per-user startup entry, also visible/manageable in Task Manager and Settings; the path is re-synced if the app is moved or updated)
 - **Click to jump**: folder → dialog navigates in; file → dialog selects it
 - **Keyboard**: ↑/↓ to move the selection, **Enter** to jump to it (or the top hit)
 - **Favorites**: star a row to pin it; tray menu → **Favorites…** to add / remove / rename inline / drag-reorder
 - **Ctrl+G**: while the overlay is visible, jump straight to the top candidate
 - **Everything search (optional)**: configure es.exe once, then type to search the whole disk from the overlay (smart ranking puts target folders on top); the tray menu can toggle the search box off at any time
-- **Tray menu**: theme (system / light / dark), window material (solid / acrylic), overlay position, Everything search, language — all switch live and persist
+- **Tray menu**: theme (system / light / dark), window material (solid / acrylic), overlay position, Everything search, browsing history, language, start with Windows — all switch live and persist
 - **Polish**: live light/dark theming, **acrylic material** for the overlay (Win10 1607+), native Windows file-type icons, Chinese / English UI, Win11-style flat card, a matching app icon family
 
 ## Usage
 
-Download the portable exe from **Releases** — no install needed. Or build it yourself:
+Download the zip from **Releases** — no install needed.
+
+### Build locally
+
+Requires Windows + the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0):
 
 ```bash
 git clone https://github.com/Mux6201/FolderJumpTool.git
 cd FolderJumpTool
-dotnet build          # Windows + .NET 10 SDK required
+dotnet run                # run directly (development)
+dotnet build -c Release   # compile only
 ```
+
+### Package a release build (same output as CI)
+
+```bash
+# Framework-dependent: smaller, needs the .NET 10 Desktop Runtime
+dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained false \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/portable
+
+# Self-contained: no runtime needed, larger
+dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained true \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/selfcontained
+```
+
+No local toolchain? GitHub → **Actions** → **release** → **Run workflow**, enter a version, then download the **Artifacts** from the run page. For a real release, push a `v*` tag (builds and creates a draft Release automatically).
 
 After launch there is **no window and no console** — a blue rounded-square arrow tray icon means it is running. The tray right-click menu switches theme, window material, overlay position and language. Press `Ctrl+O` / `Ctrl+S` in any app to see the overlay.
 
