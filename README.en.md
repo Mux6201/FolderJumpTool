@@ -24,31 +24,6 @@ A Windows tray utility that docks a tiny non-activating overlay next to system f
 
 Download the zip from **Releases** — no install needed.
 
-### Build locally
-
-Requires Windows + the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0):
-
-```bash
-git clone https://github.com/Mux6201/FolderJumpTool.git
-cd FolderJumpTool
-dotnet run                # run directly (development)
-dotnet build -c Release   # compile only
-```
-
-### Package a release build (same output as CI)
-
-```bash
-# Framework-dependent: smaller, needs the .NET 10 Desktop Runtime
-dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained false \
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/portable
-
-# Self-contained: no runtime needed, larger
-dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained true \
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/selfcontained
-```
-
-No local toolchain? GitHub → **Actions** → **release** → **Run workflow**, enter a version, then download the **Artifacts** from the run page. For a real release, push a `v*` tag (builds and creates a draft Release automatically).
-
 After launch there is **no window and no console** — a blue rounded-square arrow tray icon means it is running. The tray right-click menu switches theme, window material, overlay position and language. Press `Ctrl+O` / `Ctrl+S` in any app to see the overlay.
 
 ### Everything search (optional)
@@ -69,6 +44,19 @@ The acrylic material needs Windows 10 1607+ (ACCENT API).
 ## Tech stack
 
 WPF on `.NET 10` (C#) + Win32 (a `SetWinEventHook` for dialog events, `WM_SETTEXT` to write paths, DWM for visual bounds). No third-party NuGet packages.
+
+## Building from source
+
+Requires Windows + the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0):
+
+```bash
+git clone https://github.com/Mux6201/FolderJumpTool.git
+cd FolderJumpTool
+dotnet run                # run directly (tray-resident, no main window)
+dotnet build -c Release   # compile only
+```
+
+Packaging release builds, CI and the release process are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

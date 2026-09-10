@@ -18,38 +18,13 @@
 - **Ctrl+G**：悬浮窗可见时，直接跳到首选路径
 - **Everything 搜索（可选）**：配置 es.exe 后在悬浮窗直接搜全盘，智能排序把目标目录置顶；托盘可随时开关搜索框
 - **托盘菜单**：主题（跟随系统 / 浅 / 深）、窗口材质（纯色 / 亚克力）、悬浮窗位置、Everything 搜索、浏览历史、语言、开机自动启动——全部即时切换并记住
-- **观感**：明暗主题热切换、**亚克力毛玻璃材质**（悬浮窗，Win10 1607+）、Windows 原生文件类型图标、中英界面、Win11 风格轻量卡片、配套整套应用图标
+- **观感**：明暗主题热切换、**亚克力毛玻璃材质**（悬浮窗，Win10 1607+）、Windows 原生文件类型图标、中英界面、Win11 风格轻量卡片、统一风格的应用图标
 
 ## 使用
 
-从 **Releases** 下载解压即用（绿色 exe，无需安装）。
+从 **Releases** 下载解压即用（绿色软件，无需安装）。
 
-### 本地构建
-
-需要 Windows + [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)：
-
-```bash
-git clone https://github.com/Mux6201/FolderJumpTool.git
-cd FolderJumpTool
-dotnet run                # 直接运行（开发用）
-dotnet build -c Release   # 只编译
-```
-
-### 打包发布版（与 CI 产出一致）
-
-```bash
-# 框架依赖：体积小，需装 .NET 10 Desktop Runtime
-dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained false \
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/portable
-
-# 自包含：免运行环境，体积大
-dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained true \
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/selfcontained
-```
-
-不想本地配环境也可以直接出产物：GitHub → **Actions** → 左侧 **release** → **Run workflow** → 填版本号，跑完在该运行页面的 **Artifacts** 里下载。正式发版则推送 `v*` 标签（自动构建并创建 draft Release）。
-
-启动后**没有窗口、不弹控制台**，右下角托盘出现蓝色圆角方块箭头图标即常驻运行。托盘右键菜单可切换主题、窗口材质、悬浮窗位置与语言。在任意程序按 `Ctrl+O` / `Ctrl+S` 弹文件对话框试试。
+启动后**没有窗口、不弹控制台**，右下角托盘出现蓝色圆角方块箭头图标即常驻运行。托盘右键菜单里可切换主题、窗口材质、悬浮窗位置、语言等设置。在任意程序按 `Ctrl+O` / `Ctrl+S` 弹文件对话框试试。
 
 ### Everything 搜索（可选）
 
@@ -69,6 +44,19 @@ Windows 10/11，x64。需要 [.NET 10 Desktop Runtime](https://dotnet.microsoft.
 ## 技术栈
 
 WPF（`.NET 10`，C#）+ Win32 API（`SetWinEventHook` 监听对话框、`WM_SETTEXT` 写路径、DWM 取视觉边界），全程不依赖第三方 NuGet 包。
+
+## 自行构建
+
+需要 Windows + [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)：
+
+```bash
+git clone https://github.com/Mux6201/FolderJumpTool.git
+cd FolderJumpTool
+dotnet run                # 直接运行（托盘常驻，无主窗口）
+dotnet build -c Release   # 只编译
+```
+
+打包发布版、CI 与发版流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## License
 
