@@ -56,7 +56,21 @@ dotnet run                # run directly (tray-resident, no main window)
 dotnet build -c Release   # compile only
 ```
 
-Packaging release builds, CI and the release process are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
+### Packaging a release build
+
+These match what CI produces; pick the form you need:
+
+```bash
+# Framework-dependent: smaller, needs the .NET 10 Desktop Runtime
+dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained false \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/portable
+
+# Self-contained: no runtime needed, larger
+dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained true \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/selfcontained
+```
+
+The output lands in `publish/`. CI workflows and the release process are documented in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

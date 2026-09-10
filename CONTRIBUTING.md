@@ -18,17 +18,7 @@ dotnet build -c Release   # 只编译
 
 ## 打包发布版
 
-两种形态，命令与 CI 完全一致：
-
-```bash
-# 框架依赖：体积小，需要用户自行安装 .NET 10 Desktop Runtime
-dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained false \
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/portable
-
-# 自包含：免运行环境，体积大
-dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained true \
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/selfcontained
-```
+两种形态的完整命令见 [README → 打包发布版](README.md#打包发布版)（框架依赖 / 自包含），与 CI 完全一致。
 
 ## 持续集成
 

@@ -56,7 +56,21 @@ dotnet run                # 直接运行（托盘常驻，无主窗口）
 dotnet build -c Release   # 只编译
 ```
 
-打包发布版、CI 与发版流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
+### 打包发布版
+
+命令与 CI 产出一致，两种形态按需选：
+
+```bash
+# 框架依赖：体积小，需要用户自行安装 .NET 10 Desktop Runtime
+dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained false \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/portable
+
+# 自包含：免运行环境，体积大
+dotnet publish FolderJumpTool.csproj -c Release -r win-x64 --self-contained true \
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish/selfcontained
+```
+
+产物在 `publish/` 下。CI 工作流与发版流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## License
 
