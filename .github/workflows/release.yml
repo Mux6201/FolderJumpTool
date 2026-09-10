@@ -1,9 +1,17 @@
 name: release
 
 on:
+  # 正式发版：推送 v* 标签触发（构建 + 创建 draft Release）
   push:
     tags: ['v*']
+  # 手动构建：网页 Actions → release → Run workflow，填版本号即可出产物
+  # （不需要本地 .NET 环境；因为没有 tag，产物上传为 Actions artifact 供下载）
   workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 0.3.1，不要带 v 前缀）'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -18,11 +26,18 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Resolve version from tag
+      # 版本号来源区分：tag 推送取 tag 名（去掉 v 前缀）；手动触发起用输入的版本号。
+      # （之前手动触发在分支上，GITHUB_REF_NAME 会取成 "main"，导致 -p:Version=main 编译失败。）
+      - name: Resolve version
         id: ver
         shell: bash
         run: |
-          VER="${GITHUB_REF_NAME#v}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VER="${{ inputs.version }}"
+          else
+            VER="${GITHUB_REF_NAME}"
+          fi
+          VER="${VER#v}"
           echo "version=$VER" >> "$GITHUB_OUTPUT"
 
       - name: Publish portable (framework-dependent, single file)
@@ -55,7 +70,19 @@ jobs:
             ForEach-Object { "{0}  {1}" -f $_.Hash, (Split-Path $_.Path -Leaf) } |
             Set-Content "FolderJumpTool-$v-SHA256.txt"
 
+      # 手动触发没有 tag，不创建 Release；产物上传为 Actions artifact，网页直接下载。
+      - name: Upload build artifacts (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v6
+        with:
+          name: FolderJumpTool-${{ steps.ver.outputs.version }}-win-x64
+          path: |
+            FolderJumpTool-*.zip
+            FolderJumpTool-*-SHA256.txt
+
+      # 只有 tag 推送才创建 Release（手动触发在分支上，没有 tag 可供关联）。
       - name: Create GitHub Release
+        if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
         with:
           files: |
