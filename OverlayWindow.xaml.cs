@@ -173,11 +173,24 @@ public partial class OverlayWindow : Window
         }
     }
 
-    /// <summary>候选列表来源页签（仅在有持久化收藏时显示；无收藏整行隐藏回老版单列表）。
-    /// 最近是默认主视图（老版"资源管理器 + 最近使用"），收藏只是附加页。</summary>
-    private enum CandidateTab { Recent, Favorites }
+    /// <summary>候选列表来源页签。
+    /// 最近 = 主视图（资源管理器窗口 + 最近使用，无收藏时是唯一页）；
+    /// 收藏 = 持久化收藏夹；历史 = 自己记录的浏览历史（关掉的文件夹也在这里）。
+    /// 收藏/历史页是否出现由数据与开关决定，见 RefreshCandidates。</summary>
+    private enum CandidateTab { Recent, Favorites, History }
 
     private CandidateTab _activeTab = CandidateTab.Recent;
+
+    /// <summary>是否显示"历史"页签（托盘"浏览历史▸显示历史页签"，存 settings.json）。
+    /// 只影响显示：浏览历史始终在后台记录（记录开销极小，且关掉页签不该丢历史）。</summary>
+    private bool _showHistoryTab = true;
+
+    /// <summary>托盘开关落地：控制历史页签显隐（立即重建候选列表）。</summary>
+    public void ShowHistoryTab(bool show)
+    {
+        _showHistoryTab = show;
+        RefreshCandidates();
+    }
 
     /// <summary>键盘上下导航的当前选中行索引；-1 = 无选中（鼠标 hover 高亮不受影响）。
     /// 列表数据源每次重建（换页签/搜索/清空）都要归零，索引对应的行视觉已销毁。</summary>
@@ -189,9 +202,9 @@ public partial class OverlayWindow : Window
 
     /// <summary>
     /// 重新拉取候选路径列表。
-    /// 有收藏（favorites.json 非空）：分"最近 / 收藏"两页签，默认停最近页；
-    /// 没有任何收藏：页签行隐藏，保持老版单一混合列表
-    /// （已打开的资源管理器窗口 + 最近使用 + 桌面/下载/文档兜底展示）。
+    /// "最近"页 = 当前打开的资源管理器窗口 + 最近使用（无收藏时再加桌面/下载/文档兜底）；
+    /// "收藏"页 = 持久化收藏（有收藏才出现）；
+    /// "历史"页 = 自己记录的浏览历史（开关开启且非空才出现，关掉的文件夹也能找回）。
     /// 每次新对话框弹出/对话框重回前台时调用一次，保证列表是"新鲜"的；
     /// 顺便给每条打上"是否已在收藏夹"标记，驱动行尾星标的空心/实心。
     /// </summary>
@@ -200,27 +213,38 @@ public partial class OverlayWindow : Window
         _navIndex = -1; // 数据源即将重建，旧选中索引作废
 
         var favorites = FavoritesManager.Load();
+        // 历史页只在开关开启时构建（记录不受开关影响，始终在后台进行）
+        var historyItems = _showHistoryTab
+            ? RecentFoldersProvider.GetHistory(8)
+            : new List<FavoriteFolder>();
 
-        if (favorites.Count == 0)
-        {
-            // 无收藏 = 老版形态：无页签，混合候选（资源管理器+最近+兜底目录）
-            _activeTab = CandidateTab.Recent;
-            TabRow.Visibility = Visibility.Collapsed;
-            var items = RecentFoldersProvider.GetCandidates();
-            MarkFavorites(items);
-            FavoritesList.ItemsSource = items;
-            UpdateLocationHint();
-            UpdateEmptyHint(searchMode: false);
-            return;
-        }
-
-        // 有收藏：页签模式。最近页（默认主视图）= 资源管理器+最近使用，
-        // 收藏页 = 只列真实收藏（不再混兜底目录）
-        var recentItems = RecentFoldersProvider.GetRecentAndExplorer();
+        var recentItems = favorites.Count == 0
+            ? RecentFoldersProvider.GetCandidates()      // 无收藏：老版混合候选（含兜底目录）
+            : RecentFoldersProvider.GetRecentAndExplorer();
         var favItems = new List<FavoriteFolder>(favorites);
-        UpdateTabRow();
 
-        var active = _activeTab == CandidateTab.Recent ? recentItems : favItems;
+        // 页签行：只要有第二个页可看就出现（有收藏 或 有历史），否则回老版单列表
+        bool showTabs = favorites.Count > 0 || historyItems.Count > 0;
+        TabRow.Visibility = showTabs ? Visibility.Visible : Visibility.Collapsed;
+        TabFavButton.Visibility = favorites.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        TabHistoryButton.Visibility = historyItems.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        // 当前选中页可能已不可用（收藏被删空 / 历史清空 / 开关关闭）→ 回落到最近页
+        if (_activeTab == CandidateTab.Favorites && favorites.Count == 0)
+            _activeTab = CandidateTab.Recent;
+        if (_activeTab == CandidateTab.History && historyItems.Count == 0)
+            _activeTab = CandidateTab.Recent;
+
+        var active = _activeTab switch
+        {
+            CandidateTab.Favorites => favItems,
+            CandidateTab.History => historyItems,
+            _ => recentItems,
+        };
+
+        if (showTabs)
+            UpdateTabRow();
+
         MarkFavorites(active);
         FavoritesList.ItemsSource = active;
         UpdateLocationHint();
@@ -230,30 +254,46 @@ public partial class OverlayWindow : Window
     /// <summary>页签点击切换数据源；搜索模式页签已隐藏，不会触发。</summary>
     private void Tab_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not System.Windows.Controls.Button b)
+        if (sender is not System.Windows.Controls.Button { Tag: string tag })
             return;
-        var tab = ReferenceEquals(b, TabRecentButton) ? CandidateTab.Recent : CandidateTab.Favorites;
+
+        var tab = tag switch
+        {
+            "Favorites" => CandidateTab.Favorites,
+            "History" => CandidateTab.History,
+            _ => CandidateTab.Recent,
+        };
+
         if (tab == _activeTab)
             return;
         _activeTab = tab;
         RefreshCandidates();
     }
 
-    /// <summary>更新页签行选中态：选中页 = 浅蓝 chip 底 + 主题蓝字；未选中 = 透明底 + 主文字色。
-    /// 字号字重恒定，切换选中不引起字形宽度变化，两标签始终对齐。标签纯文字不带计数。</summary>
+    /// <summary>更新页签选中态（下划线式）：选中 = 主题蓝文字 + 底部主题色短横线；
+    /// 未选中 = 次级灰文字、无横线。不再用底色（hover 反馈改由 TabButtonStyle 的
+    /// IsMouseOver 触发器给淡底）。文字色与横线都取主题画刷，明暗主题自动适配。
+    /// 页签行的整体显隐由 RefreshCandidates 控制（此处不设置 TabRow.Visibility）。</summary>
     private void UpdateTabRow()
     {
-        bool recent = _activeTab == CandidateTab.Recent;
-        var bgOn = GetBrush("ItemHoverBrush");
-        var bgOff = System.Windows.Media.Brushes.Transparent;
-        var fgOn = GetBrush("FolderIconHoverBrush");
-        var fgOff = GetBrush("TextMainBrush");
+        var active = GetBrush("FolderIconHoverBrush");   // 主题蓝（强调色）
+        var inactive = GetBrush("PathForegroundBrush");  // 次级灰（与路径列同色）
 
-        TabRecentButton.Background = recent ? bgOn : bgOff;
-        TabFavButton.Background = recent ? bgOff : bgOn;
-        if (TabRecentText != null) TabRecentText.Foreground = recent ? fgOn : fgOff;
-        if (TabFavText != null) TabFavText.Foreground = recent ? fgOff : fgOn;
-        TabRow.Visibility = Visibility.Visible;
+        SetTabState(TabRecentText, TabRecentUnderline, _activeTab == CandidateTab.Recent, active, inactive);
+        SetTabState(TabFavText, TabFavUnderline, _activeTab == CandidateTab.Favorites, active, inactive);
+        SetTabState(TabHistoryText, TabHistoryUnderline, _activeTab == CandidateTab.History, active, inactive);
+    }
+
+    /// <summary>单个页签的选中视觉：文字换色 + 底部下划线显隐。
+    /// 画刷参数可空（主题键意外缺失时保持原色，不赋值，避免空引用）。</summary>
+    private static void SetTabState(System.Windows.Controls.TextBlock? text,
+        System.Windows.Shapes.Rectangle? underline, bool selected,
+        System.Windows.Media.Brush? active, System.Windows.Media.Brush? inactive)
+    {
+        if (text != null && (selected ? active : inactive) is { } brush)
+            text.Foreground = brush;
+        if (underline != null)
+            underline.Visibility = selected ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>对话框重新回到前台时调用：搜索模式（搜索框有字）保留现有结果不重刷——
@@ -978,6 +1018,10 @@ public partial class OverlayWindow : Window
     /// 异步实现：退路方案需要分段等待（SendInput 时序），await 不阻塞 UI。</summary>
     private async void ActivatePath(string path)
     {
+        // 记入浏览历史：用户实际选择的目标权重最高（下次弹窗排在历史页最前）。
+        // 传文件路径时 Touch 内部会取其所在目录（跳文件也代表"去过那个目录"）。
+        HistoryStore.Touch(path);
+
         if (_targetDialog == IntPtr.Zero || !NativeMethods.IsWindow(_targetDialog))
         {
             Log.Info($"[FolderJumpTool]   -> _targetDialog 无效 (hwnd={_targetDialog})，中止");

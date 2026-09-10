@@ -5,6 +5,7 @@
     <!-- ============ Overlay ============ -->
     <sys:String x:Key="Overlay.Title">Quick Jump</sys:String>
     <sys:String x:Key="Overlay.TabFavorites">Favorites</sys:String>
+    <sys:String x:Key="Overlay.TabHistory">History</sys:String>
     <sys:String x:Key="Overlay.TabRecent">Recent</sys:String>
     <sys:String x:Key="Overlay.LocationCount">{0} locations</sys:String>
     <sys:String x:Key="Overlay.SearchHint">Search Everything (Enter for top hit)</sys:String>
@@ -42,6 +43,8 @@
     <sys:String x:Key="Tray.EsEnabled">Everything search: enabled</sys:String>
     <sys:String x:Key="Tray.EsHidden">Everything search: search box hidden</sys:String>
     <sys:String x:Key="Tray.ChooseEs">Choose es.exe…</sys:String>
+    <sys:String x:Key="Tray.History">Browsing history</sys:String>
+    <sys:String x:Key="Tray.HistoryToggle">Show history tab</sys:String>
     <sys:String x:Key="Tray.Exit">Exit</sys:String>
     <sys:String x:Key="Tray.BalloonTitle">FolderJumpTool</sys:String>
     <sys:String x:Key="Tray.BalloonBody">Running: press Ctrl+O / Ctrl+S in any app to try jumping</sys:String>

@@ -14,6 +14,11 @@ internal static class NativeMethods
     public const uint EVENT_OBJECT_SHOW = 0x8002;
     public const uint EVENT_OBJECT_DESTROY = 0x8001;
     public const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;
+
+    /// <summary>窗口标题变化。资源管理器打开文件夹/导航到子目录/切标签页都会触发
+    /// （窗口标题就是当前文件夹名），用来事件驱动地记录浏览历史。</summary>
+    public const uint EVENT_OBJECT_NAMECHANGE = 0x800C;
+
     public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
 
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000;

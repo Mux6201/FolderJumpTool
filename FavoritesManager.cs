@@ -17,6 +17,35 @@ internal sealed class FavoriteFolder
     /// 搜索结果的文件夹/文件由 EverythingSearch 按磁盘真实类型标注，不写入 json。</summary>
     [JsonIgnore]
     public bool IsDirectory { get; set; } = true;
+
+    /// <summary>
+    /// 父目录路径（不含自身末段、不含尾分隔符）——悬浮窗列表右侧显示用。
+    /// 左侧名称列已经显示末段（目录名/文件名），右侧若再显示完整路径就是重复；
+    /// 只显示父目录则"名称 + 父目录"正好互补为完整路径。盘符根（"D:"）补回 "\"；
+    /// 根目录本身（"D:\"）与无分隔符的裸名没有父目录，返回空串。
+    /// 手写查找分隔符而非 System.IO.Path：本类有同名属性 Path，短名会冲突。
+    /// </summary>
+    [JsonIgnore]
+    public string ParentPath
+    {
+        get
+        {
+            var raw = Path ?? string.Empty;
+            var trimmed = raw.TrimEnd('\\', '/');
+            if (trimmed.Length == 0)
+                return string.Empty;
+
+            int idx = trimmed.LastIndexOfAny(new[] { '\\', '/' });
+            if (idx < 0)
+                return string.Empty; // "D:\" 或裸名：没有父目录可显示
+
+            var parent = raw.Substring(0, idx);
+            return IsDriveRoot(parent) ? parent + "\\" : parent; // "D:" → "D:\"
+        }
+    }
+
+    /// <summary>是否是盘符根（"D:" 形式）。</summary>
+    private static bool IsDriveRoot(string s) => s.Length == 2 && s[1] == ':';
 }
 
 /// <summary>

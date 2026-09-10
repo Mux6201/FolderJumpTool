@@ -16,6 +16,7 @@ internal sealed class DialogEventWatcher : IDisposable
     private IntPtr _hookForeground;
     private IntPtr _hookLocationChange;
     private IntPtr _hookDestroy;
+    private IntPtr _hookNameChange;
 
     private readonly System.Windows.Threading.DispatcherTimer _syncTimer;
     private readonly System.Windows.Threading.DispatcherTimer _safetyNetTimer;
@@ -31,6 +32,14 @@ internal sealed class DialogEventWatcher : IDisposable
     /// <summary>对话框失去前台焦点（用户切到了别的窗口）——这时悬浮窗应该跟着隐藏，
     /// 不然会出现"对话框已经不是当前窗口了，但悬浮窗还浮在所有窗口最上层"的问题。</summary>
     public event Action<IntPtr>? DialogDeactivated;
+
+    /// <summary>资源管理器窗口标题变化（打开文件夹窗口 / 窗口内导航到新目录 / 切标签页）。
+    /// 用于事件驱动地记录浏览历史——比定时轮询更及时，且只在用户真正操作时触发。</summary>
+    public event Action? ExplorerWindowChanged;
+
+    /// <summary>上次因资源管理器标题变化触发通知的时间（800ms 节流用：
+    /// 一次导航可能连发多次标题变化，没必要每次都去枚举窗口）。</summary>
+    private DateTime _lastExplorerNotifyUtc = DateTime.MinValue;
 
     public DialogEventWatcher()
     {
@@ -69,11 +78,10 @@ internal sealed class DialogEventWatcher : IDisposable
             IntPtr.Zero, _callback, 0, 0,
             NativeMethods.WINEVENT_OUTOFCONTEXT | NativeMethods.WINEVENT_SKIPOWNPROCESS);
 
-        _hookLocationChange = NativeMethods.SetWinEventHook(
-            NativeMethods.EVENT_OBJECT_LOCATIONCHANGE, NativeMethods.EVENT_OBJECT_LOCATIONCHANGE,
-            IntPtr.Zero, _callback, 0, 0,
-            NativeMethods.WINEVENT_OUTOFCONTEXT | NativeMethods.WINEVENT_SKIPOWNPROCESS);
-
+        // LOCATIONCHANGE 不在此常驻注册：它是系统里最高频的 WinEvent 之一
+        // （caret 闪烁、列表滚动、任何窗口内元素移动都会触发），空闲常驻会让每个
+        // 事件都跨进程进回调空转。改为跟踪对话框期间才装（InstallLocationHook），
+        // 关闭/失联即卸，空闲时零事件开销。
         _hookDestroy = NativeMethods.SetWinEventHook(
             NativeMethods.EVENT_OBJECT_DESTROY, NativeMethods.EVENT_OBJECT_DESTROY,
             IntPtr.Zero, _callback, 0, 0,
@@ -81,6 +89,15 @@ internal sealed class DialogEventWatcher : IDisposable
 
         _hookForeground = NativeMethods.SetWinEventHook(
             NativeMethods.EVENT_SYSTEM_FOREGROUND, NativeMethods.EVENT_SYSTEM_FOREGROUND,
+            IntPtr.Zero, _callback, 0, 0,
+            NativeMethods.WINEVENT_OUTOFCONTEXT | NativeMethods.WINEVENT_SKIPOWNPROCESS);
+
+        // 资源管理器窗口标题变化 = 用户打开文件夹窗口 / 导航进子目录 / 切标签页
+        // （窗口标题就是当前文件夹名）。用它驱动浏览历史记录，取代定时轮询：
+        // 只有用户真正操作时才触发，比定频枚举更省、更及时。
+        // 该事件全系统窗口都有（浏览器/终端标题变化等），回调里先用类名过滤。
+        _hookNameChange = NativeMethods.SetWinEventHook(
+            NativeMethods.EVENT_OBJECT_NAMECHANGE, NativeMethods.EVENT_OBJECT_NAMECHANGE,
             IntPtr.Zero, _callback, 0, 0,
             NativeMethods.WINEVENT_OUTOFCONTEXT | NativeMethods.WINEVENT_SKIPOWNPROCESS);
 
@@ -120,7 +137,7 @@ internal sealed class DialogEventWatcher : IDisposable
                 case NativeMethods.EVENT_OBJECT_DESTROY:
                     if (hwnd == _currentDialog)
                     {
-                        _currentDialog = IntPtr.Zero;
+                        ClearCurrentDialog();
                         DialogClosed?.Invoke(hwnd);
                     }
                     break;
@@ -134,6 +151,10 @@ internal sealed class DialogEventWatcher : IDisposable
                             DialogDeactivated?.Invoke(_currentDialog);
                     }
                     break;
+
+                case NativeMethods.EVENT_OBJECT_NAMECHANGE:
+                    HandleExplorerNameChange(hwnd);
+                    break;
             }
         }
         catch
@@ -144,6 +165,12 @@ internal sealed class DialogEventWatcher : IDisposable
 
     private void HandleDialogStart(IntPtr hwnd)
     {
+        // 同一对话框的去重：DIALOGSTART / OBJECT_SHOW（以及 OBJECT_SHOW 多次连发）会
+        // 对同一个 hwnd 重复进来，不去重会让 DialogOpened 触发两次 → 悬浮窗把
+        // "枚举 Explorer 窗口 + 解析最近 .lnk + 构建候选列表"整套重活干两遍。
+        if (hwnd == _currentDialog)
+            return;
+
         // 注意：EVENT_SYSTEM_DIALOGSTART 对系统里任何程序弹出的任何对话框都会触发，
         // 不只是文件对话框，所以这里大部分调用会被过滤掉——这是正常现象，
         // 不逐条打印"被过滤"的日志，否则控制台会被刷屏。
@@ -155,8 +182,36 @@ internal sealed class DialogEventWatcher : IDisposable
 
         Log.Info($"[FolderJumpTool] 确认是文件/文件夹选择对话框，触发 DialogOpened，hwnd={hwnd}");
         _currentDialog = hwnd;
+        InstallLocationHook(); // 开始跟踪后才需要 LOCATIONCHANGE（空闲时零事件开销）
         DialogOpened?.Invoke(hwnd);
         RaiseMoved(hwnd);
+    }
+
+    /// <summary>跟踪开始时装载 LOCATIONCHANGE hook（拖动跟随靠它事件驱动）；空闲不注册。</summary>
+    private void InstallLocationHook()
+    {
+        if (_hookLocationChange != IntPtr.Zero)
+            return;
+        _hookLocationChange = NativeMethods.SetWinEventHook(
+            NativeMethods.EVENT_OBJECT_LOCATIONCHANGE, NativeMethods.EVENT_OBJECT_LOCATIONCHANGE,
+            IntPtr.Zero, _callback, 0, 0,
+            NativeMethods.WINEVENT_OUTOFCONTEXT | NativeMethods.WINEVENT_SKIPOWNPROCESS);
+    }
+
+    /// <summary>跟踪结束即卸——LOCATIONCHANGE 是最高频 WinEvent，常驻会让空闲时回调风暴。</summary>
+    private void UninstallLocationHook()
+    {
+        if (_hookLocationChange == IntPtr.Zero)
+            return;
+        NativeMethods.UnhookWinEvent(_hookLocationChange);
+        _hookLocationChange = IntPtr.Zero;
+    }
+
+    /// <summary>清掉当前跟踪目标（对话框关闭/失联）：卸 LOCATIONCHANGE + 复位句柄。</summary>
+    private void ClearCurrentDialog()
+    {
+        UninstallLocationHook();
+        _currentDialog = IntPtr.Zero;
     }
 
     private void SyncCurrentDialog()
@@ -167,7 +222,7 @@ internal sealed class DialogEventWatcher : IDisposable
         if (!NativeMethods.IsWindow(_currentDialog))
         {
             var closed = _currentDialog;
-            _currentDialog = IntPtr.Zero;
+            ClearCurrentDialog();
             DialogClosed?.Invoke(closed);
             return;
         }
@@ -187,6 +242,7 @@ internal sealed class DialogEventWatcher : IDisposable
         Log.Info(
             $"[FolderJumpTool] 事件驱动检测都没捕获到，安全网扫描兜底找到 hwnd={found}（可以反馈这个场景，方便补充针对性的事件处理）");
         _currentDialog = found;
+        InstallLocationHook();
         DialogOpened?.Invoke(found);
         RaiseMoved(found);
     }
@@ -240,6 +296,27 @@ internal sealed class DialogEventWatcher : IDisposable
         return sb.ToString() == "#32770"; // 系统公共对话框的窗口类名
     }
 
+    /// <summary>
+    /// 窗口标题变化：只关心资源管理器窗口（打开文件夹窗口 / 导航进子目录 / 切标签页
+    /// 都会改标题）。非资源管理器窗口（浏览器、终端等的标题变化）直接忽略。
+    /// 800ms 节流：一次导航可能连发多次标题变化，合并成一次"去枚举窗口记录"的请求。
+    /// </summary>
+    private void HandleExplorerNameChange(IntPtr hwnd)
+    {
+        var now = DateTime.UtcNow;
+        if ((now - _lastExplorerNotifyUtc).TotalMilliseconds < 800)
+            return;
+
+        var sb = new StringBuilder(64);
+        NativeMethods.GetClassName(hwnd, sb, sb.Capacity);
+        var cls = sb.ToString();
+        if (cls != "CabinetWClass" && cls != "ExploreWClass")
+            return;
+
+        _lastExplorerNotifyUtc = now;
+        ExplorerWindowChanged?.Invoke();
+    }
+
     public void Dispose()
     {
         _syncTimer.Stop();
@@ -247,7 +324,8 @@ internal sealed class DialogEventWatcher : IDisposable
         if (_hookDialogStart != IntPtr.Zero) NativeMethods.UnhookWinEvent(_hookDialogStart);
         if (_hookObjectShow != IntPtr.Zero) NativeMethods.UnhookWinEvent(_hookObjectShow);
         if (_hookForeground != IntPtr.Zero) NativeMethods.UnhookWinEvent(_hookForeground);
-        if (_hookLocationChange != IntPtr.Zero) NativeMethods.UnhookWinEvent(_hookLocationChange);
+        UninstallLocationHook();
+        if (_hookNameChange != IntPtr.Zero) NativeMethods.UnhookWinEvent(_hookNameChange);
         if (_hookDestroy != IntPtr.Zero) NativeMethods.UnhookWinEvent(_hookDestroy);
     }
 }

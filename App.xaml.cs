@@ -32,6 +32,14 @@ public partial class App : System.Windows.Application
         Interval = TimeSpan.FromMilliseconds(250),
     };
 
+    /// <summary>浏览历史兜底采样：主渠道是事件驱动（资源管理器窗口标题变化，
+    /// 见 DialogEventWatcher.ExplorerWindowChanged），这里只做低频兜底，
+    /// 防个别导航场景不触发标题变化而漏记。没开资源管理器窗口时零成本。</summary>
+    private readonly System.Windows.Threading.DispatcherTimer _historySampleTimer = new()
+    {
+        Interval = TimeSpan.FromSeconds(60),
+    };
+
     private WinForms.NotifyIcon? _trayIcon;
     private IntPtr _trayIconHandle;
 
@@ -72,11 +80,17 @@ public partial class App : System.Windows.Application
     private WinForms.ToolStripMenuItem? _menuSearchGroup;
     private WinForms.ToolStripMenuItem? _menuSearchToggle;
     private WinForms.ToolStripMenuItem? _menuChooseEs;
+    private WinForms.ToolStripMenuItem? _menuHistoryGroup;
+    private WinForms.ToolStripMenuItem? _menuHistoryToggle;
     private WinForms.ToolStripMenuItem? _menuExit;
 
     /// <summary>Everything 搜索框是否显示（托盘"Everything 搜索"开关）。
     /// 配了 es.exe 也允许手动关掉搜索框；存 settings.json，默认开。</summary>
     private bool _searchEnabled = true;
+
+    /// <summary>是否显示悬浮窗的"历史"页签（托盘"浏览历史"开关），存 settings.json，默认开。
+    /// 只控制显示：浏览历史始终在后台记录，关掉页签不会丢历史。</summary>
+    private bool _showHistoryTab = true;
 
     /// <summary>可用的 es.exe 路径；null = 未配置/未找到（悬浮窗不显示搜索框）。</summary>
     private string? _esPath;
@@ -143,6 +157,11 @@ public partial class App : System.Windows.Application
         _esPath = EverythingSearch.FindEsExe(SettingsStore.Get("esPath"));
         _searchEnabled = SettingsStore.Get("searchEnabled", "true") != "false";
         _overlay.EnableSearch(_searchEnabled ? _esPath : null);
+
+        // 浏览历史：记录始终在后台进行（关掉的资源管理器文件夹也能在"历史"页找回）；
+        // showHistoryTab 只管"历史"页签显不显示，关掉页签不会丢历史。
+        _showHistoryTab = SettingsStore.Get("showHistoryTab", "true") != "false";
+        _overlay.ShowHistoryTab(_showHistoryTab);
 
         // 系统托盘图标：常驻右下角，左键单击弹运行提示，
         // 右键菜单：主题切换（跟随系统/浅色/深色）+ 退出。
@@ -301,6 +320,11 @@ public partial class App : System.Windows.Application
             });
         };
 
+        // 浏览历史：资源管理器窗口"打开 / 导航进子目录 / 切标签页"都会改窗口标题，
+        // 由此事件驱动地记录（比定频轮询更及时，且只在用户真正操作时触发）。
+        // 60 秒兜底采样见 _historySampleTimer，防个别场景不触发标题变化。
+        _watcher.ExplorerWindowChanged += () => RecentFoldersProvider.RecordOpenExplorerFolders();
+
         _watcher.DialogClosed += _ =>
         {
             Dispatcher.Invoke(() =>
@@ -339,6 +363,11 @@ public partial class App : System.Windows.Application
             _overlay.HideOverlay();
         };
         _zombieTimer.Start();
+
+        // 浏览历史兜底采样（主渠道是 _watcher.ExplorerWindowChanged 事件驱动）。
+        // 记录不受"显示历史页签"开关影响（关掉页签只是不显示，历史照样积累）。
+        _historySampleTimer.Tick += (_, _) => RecentFoldersProvider.RecordOpenExplorerFolders();
+        _historySampleTimer.Start();
 
         // ShutdownMode 设为 OnExplicitShutdown，因为这是个常驻后台的小工具，
         // 悬浮窗隐藏/显示不应该导致整个 App 退出；退出走托盘菜单 -> Shutdown()。
@@ -446,6 +475,18 @@ public partial class App : System.Windows.Application
         _menuSearchGroup.DropDownItems.Add(new WinForms.ToolStripSeparator());
         _menuSearchGroup.DropDownItems.Add(_menuChooseEs);
         menu.Items.Add(_menuSearchGroup);
+
+        // 浏览历史组：历史在后台始终记录（关掉的资源管理器文件夹也能在历史页找回），
+        // 这里的开关只控制悬浮窗"历史"页签显不显示——关掉页签不会停记录、不丢历史。
+        _menuHistoryGroup = new WinForms.ToolStripMenuItem(S("Tray.History"));
+        _menuHistoryToggle = new WinForms.ToolStripMenuItem(S("Tray.HistoryToggle"))
+        {
+            CheckOnClick = true,
+            Checked = _showHistoryTab,
+        };
+        _menuHistoryToggle.Click += OnHistoryToggleClick;
+        _menuHistoryGroup.DropDownItems.Add(_menuHistoryToggle);
+        menu.Items.Add(_menuHistoryGroup);
 
         // 语言三选一：跟随系统（中文系统→中文）/ 强制中文 / 强制 English，存 settings.json。
         _menuLangGroup = new WinForms.ToolStripMenuItem(S("Tray.Language"));
@@ -609,6 +650,16 @@ public partial class App : System.Windows.Application
             _menuMaterialSolid.Checked = _material == WindowMaterial.Solid;
         if (_menuMaterialAcrylic != null)
             _menuMaterialAcrylic.Checked = _material == WindowMaterial.Acrylic;
+    }
+
+    /// <summary>浏览历史开关点击：只切换"历史"页签的显隐并持久化。
+    /// 记录本身不受影响（后台始终进行），关掉页签不会丢历史。</summary>
+    private void OnHistoryToggleClick(object? sender, EventArgs e)
+    {
+        _showHistoryTab = _menuHistoryToggle is { Checked: true };
+        SettingsStore.Set("showHistoryTab", _showHistoryTab ? "true" : "false");
+        _overlay?.ShowHistoryTab(_showHistoryTab);
+        Log.Info($"[FolderJumpTool] 历史页签: {(_showHistoryTab ? "显示" : "隐藏")}");
     }
 
     /// <summary>Everything 搜索开关点击：切换搜索框显示并持久化（es.exe 未配置时开关不可用）。</summary>
@@ -836,6 +887,10 @@ public partial class App : System.Windows.Application
         }
         if (_menuChooseEs != null)
             _menuChooseEs.Text = S("Tray.ChooseEs");
+        if (_menuHistoryGroup != null)
+            _menuHistoryGroup.Text = S("Tray.History");
+        if (_menuHistoryToggle != null)
+            _menuHistoryToggle.Text = S("Tray.HistoryToggle");
         if (_menuLangGroup != null)
             _menuLangGroup.Text = S("Tray.Language");
         if (_menuLangSystem != null)

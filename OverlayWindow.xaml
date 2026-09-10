@@ -50,21 +50,33 @@
         <!-- 顶部页签按钮（最近 / 收藏）：扁平文字 chip，选中态（浅蓝底 + 主题蓝字）
              由 code-behind 直接改背景/文字色——字号字重恒定不变，两标签天然对齐，
              不因选中加粗产生字形宽度跳变。无 hover 变色，避免与选中底混淆。 -->
+        <!-- 页签按钮：下划线式选中（Win11 风格）。
+             选中态由 code-behind 控制（主题蓝文字 + 底部主题色短横线，见 UpdateTabRow），
+             这里只负责通用外观与 hover 反馈（淡底）；Background 保持透明不与选中态冲突。
+             Padding 底部留 0：让下划线能紧贴按钮底边，与下方全宽分隔线贴合。 -->
         <Style x:Key="TabButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="12,3"/>
+            <Setter Property="Padding" Value="12,3,12,0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
                                 CornerRadius="4"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center"
                                               VerticalAlignment="Center"/>
                         </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd"
+                                        Property="Background"
+                                        Value="{DynamicResource ItemHoverBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -88,7 +100,12 @@
             MouseEnter="Card_MouseEnter"
             MouseLeave="Card_MouseLeave">
 
-        <StackPanel Orientation="Vertical" MinWidth="400" MaxWidth="640">
+        <!-- 固定宽度：宽度是"容器属性"，不该被内容（路径长短/结果集变化）牵着走。
+             之前用 MinWidth=400 + MaxWidth=640 配 SizeToContent，宽度会随
+             * 列（路径完整文本）的期望宽度在 400~640 间跳动——搜索时每敲一个
+             字符都可能突变。改为固定宽度后彻底稳定（高度仍随结果条数自适应）。
+             506 + Border 的 Padding 6×2 + 描边 1×2 = 卡片总宽 520。 -->
+        <StackPanel Orientation="Vertical" Width="506">
             <!-- 标题行：左"快速跳转"，右侧候选数提示（搜索模式下自动隐藏）。
                  最右的 × 是"手动退出"出口：平时完全透明不可点，
                  hover 卡片任意处才淡入——用于误判窗口/悬浮窗没正常消失时
@@ -197,10 +214,13 @@
                 </Border>
             </Grid>
 
-            <!-- 页签行：候选模式显示"最近 / 收藏"两个来源页。
+            <!-- 页签行：候选模式显示"最近 / 收藏 / 历史"来源页。
                  最近是主视图（默认选中，即老版"资源管理器窗口 + 最近使用"），
-                 收藏是附加页放在后面；搜索模式整行隐藏——搜索结果独占列表。
-                 选中态（浅蓝底 + 蓝字）由 code-behind 更新，文字不含计数。 -->
+                 收藏是附加页放在后面；历史页列出自己记录的浏览历史（关掉的文件夹也能找回），
+                 由托盘"浏览历史▸显示历史页签"开关控制，无历史时整页隐藏。
+                 搜索模式整行隐藏——搜索结果独占列表。
+                 选中态 = 主题蓝文字 + 底部短横线（下划线式），由 code-behind 更新；
+                 横线贴按钮底边、紧邻下方全宽分隔线，形成 Win11 标签页的观感。 -->
             <StackPanel x:Name="TabRow"
                         Orientation="Horizontal"
                         Margin="4,6,4,0">
@@ -208,26 +228,68 @@
                         Style="{StaticResource TabButtonStyle}"
                         Click="Tab_Click"
                         Tag="Recent">
-                    <TextBlock x:Name="TabRecentText"
-                               FontSize="12"
-                               VerticalAlignment="Center"
-                               Text="{DynamicResource Overlay.TabRecent}"/>
+                    <Grid>
+                        <TextBlock x:Name="TabRecentText"
+                                   FontSize="12"
+                                   Margin="0,0,0,4"
+                                   VerticalAlignment="Center"
+                                   Text="{DynamicResource Overlay.TabRecent}"/>
+                        <Rectangle x:Name="TabRecentUnderline"
+                                   Height="2"
+                                   VerticalAlignment="Bottom"
+                                   RadiusX="1"
+                                   RadiusY="1"
+                                   Visibility="Collapsed"
+                                   Fill="{DynamicResource FolderIconHoverBrush}"/>
+                    </Grid>
                 </Button>
                 <Button x:Name="TabFavButton"
                         Style="{StaticResource TabButtonStyle}"
                         Margin="4,0,0,0"
                         Click="Tab_Click"
                         Tag="Favorites">
-                    <TextBlock x:Name="TabFavText"
-                               FontSize="12"
-                               VerticalAlignment="Center"
-                               Text="{DynamicResource Overlay.TabFavorites}"/>
+                    <Grid>
+                        <TextBlock x:Name="TabFavText"
+                                   FontSize="12"
+                                   Margin="0,0,0,4"
+                                   VerticalAlignment="Center"
+                                   Text="{DynamicResource Overlay.TabFavorites}"/>
+                        <Rectangle x:Name="TabFavUnderline"
+                                   Height="2"
+                                   VerticalAlignment="Bottom"
+                                   RadiusX="1"
+                                   RadiusY="1"
+                                   Visibility="Collapsed"
+                                   Fill="{DynamicResource FolderIconHoverBrush}"/>
+                    </Grid>
+                </Button>
+                <Button x:Name="TabHistoryButton"
+                        Style="{StaticResource TabButtonStyle}"
+                        Margin="4,0,0,0"
+                        Click="Tab_Click"
+                        Tag="History"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <TextBlock x:Name="TabHistoryText"
+                                   FontSize="12"
+                                   Margin="0,0,0,4"
+                                   VerticalAlignment="Center"
+                                   Text="{DynamicResource Overlay.TabHistory}"/>
+                        <Rectangle x:Name="TabHistoryUnderline"
+                                   Height="2"
+                                   VerticalAlignment="Bottom"
+                                   RadiusX="1"
+                                   RadiusY="1"
+                                   Visibility="Collapsed"
+                                   Fill="{DynamicResource FolderIconHoverBrush}"/>
+                    </Grid>
                 </Button>
             </StackPanel>
 
-            <!-- 标题区/搜索条与列表的分隔线，让层级清晰（不占列表滚动高度） -->
+            <!-- 标题区/搜索条与列表的分隔线，让层级清晰（不占列表滚动高度）。
+                 上边距收紧到 2：页签的选中下划线就在它正上方，两者贴合。 -->
             <Rectangle Height="1"
-                       Margin="2,6,2,4"
+                       Margin="2,2,2,4"
                        Fill="{DynamicResource DividerBrush}"/>
 
             <ScrollViewer x:Name="ListScroller"
@@ -237,7 +299,7 @@
                           Background="Transparent">
                 <ItemsControl x:Name="FavoritesList">
                     <ItemsControl.ItemTemplate>
-                        <!-- 单行布局：名称在左（默认常规字重，hover 加粗），路径灰色同行跟随
+                        <!-- 单行布局：名称在左（默认常规字重，hover 加粗），父目录灰色同行跟随
                              （超宽截断），避免上下两行把窗口撑成长条形。完整路径放 ToolTip。 -->
                         <DataTemplate>
                             <Button Tag="{Binding Path}"
@@ -272,19 +334,36 @@
                                            Stretch="Uniform"
                                            Margin="0,0,8,0"
                                            VerticalAlignment="Center"/>
-                                    <TextBlock x:Name="NameText"
-                                               Grid.Column="1"
-                                               Text="{Binding Name}"
-                                               FontWeight="Normal"
-                                               FontSize="13"
-                                               MaxWidth="170"
-                                               TextTrimming="CharacterEllipsis"
-                                               VerticalAlignment="Center"
-                                               Margin="0,0,10,0"
-                                               Foreground="{DynamicResource TextMainBrush}"/>
-                                    <TextBlock x:Name="PathText"
-                                               Grid.Column="2"
-                                               Text="{Binding Path}"
+                                    <!-- 名称列：外层 Grid 负责"宽度恒定"——hover 时 NameText
+                                         变加粗会变宽，而本列是 Auto 宽度，会连带把后面的
+                                         路径/星标往右挤一下（移开再还原，来回抖）。
+                                         幽灵文本（同文案 + Bold + Hidden）不绘制但参与测量，
+                                         列宽恒等于"加粗后"的宽度 → 加粗反馈保留、零位移。 -->
+                                    <Grid Grid.Column="1"
+                                          Margin="0,0,10,0"
+                                          VerticalAlignment="Center">
+                                        <TextBlock x:Name="NameText"
+                                                   Text="{Binding Name}"
+                                                   FontWeight="Normal"
+                                                   FontSize="13"
+                                                   MaxWidth="170"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextMainBrush}"/>
+                                        <TextBlock Text="{Binding Name}"
+                                                   FontWeight="Bold"
+                                                   FontSize="13"
+                                                   MaxWidth="170"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Visibility="Hidden"/>
+                                    </Grid>
+                                    <!-- 路径列：只显示"父目录"。
+                                         左侧名称列已有末段（目录名/文件名），右侧若显示
+                                         完整路径就是重复（路径必然以名称结尾）；只显示父目录
+                                         两列正好互补成完整路径，且路径更短、更少触发省略。
+                                         例：FolderJumpTool | D:\Code\Local -->
+                                    <TextBlock Grid.Column="2"
+                                               Text="{Binding ParentPath}"
                                                FontSize="13"
                                                TextTrimming="CharacterEllipsis"
                                                VerticalAlignment="Center"

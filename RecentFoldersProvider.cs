@@ -149,7 +149,42 @@ internal static class RecentFoldersProvider
         // 最上面，因此当前正在看的那个目录必然排最前。取不到 hwnd 的（防御性）
         // 保持原枚举顺序排到后面，反正前面能排的都排了。
         windows.Sort((a, b) => ZOrderIndex(a.Hwnd).CompareTo(ZOrderIndex(b.Hwnd)));
+
+        // 顺带记入浏览历史：这些窗口关掉后，路径仍能在悬浮窗"历史"页找回。
+        // 放在枚举出口，任何取候选的调用都会记录；记录与"显示历史页签"开关无关。
+        // skipValidation：这些路径刚由 Shell 枚举出来、必然存在，省掉逐个磁盘检查。
+        HistoryStore.TouchMany(windows.Select(w => w.Path).ToList(), skipValidation: true);
+
         return windows;
+    }
+
+    /// <summary>
+    /// 把"当前打开的资源管理器窗口"路径记入浏览历史（枚举本身即记录，见 GetOpenExplorerFolders 出口）。
+    ///
+    /// 供 App 的低频后台采样调用：我们本来只在"弹对话框"时才枚举资源管理器窗口，
+    /// 于是"打开资源管理器 → 逛一圈 → 关掉 → 再弹对话框"这种顺序下，窗口关闭时
+    /// 已经没有枚举机会，那些目录会漏记。窗口存活期间被采样到一次即可留住。
+    /// </summary>
+    public static void RecordOpenExplorerFolders() => _ = GetOpenExplorerFolders();
+
+    /// <summary>
+    /// 悬浮窗"历史"页数据源：自己记录的浏览历史（最近使用倒序），
+    /// 关掉资源管理器窗口的文件夹也能在这里找回。目录已被删除的条目会自动跳过。
+    /// </summary>
+    public static List<FavoriteFolder> GetHistory(int max)
+    {
+        var result = new List<FavoriteFolder>();
+        foreach (var path in HistoryStore.GetRecent(max))
+        {
+            var name = new DirectoryInfo(path).Name;
+            result.Add(new FavoriteFolder
+            {
+                Name = name.Length > 0 ? name : path,
+                Path = path,
+                IsDirectory = true,
+            });
+        }
+        return result;
     }
 
     /// <summary>计算某顶层窗口在桌面 Z 序中的深度：0 = 最顶层，越大越靠底。</summary>
@@ -170,13 +205,24 @@ internal static class RecentFoldersProvider
         return int.MaxValue; // 没在 Z 序里找到（防御），排最后
     }
 
+    /// <summary>最近文件夹缓存：Recent 目录可能有几百上千个 .lnk，逐个 COM 解析
+    /// （ShellLinkResolver，每个 1~10ms）不能在每次打开对话框时重做。
+    /// 30 秒内复用同一份结果——Recent 目录变化频率远低于此，感知不到差异。</summary>
+    private static List<string>? _recentCache;
+    private static DateTime _recentCacheUtc;
+
     /// <summary>
     /// 读取"最近使用的文件"里的 .lnk 快捷方式，解析出目标路径，
     /// 如果目标本身是文件夹就直接用，是文件就取它所在的文件夹。
     /// 按最后写入时间倒序，取前 N 个去重后的文件夹。
+    /// 解析尝试上限 40 个：倒序靠后的 .lnk 大多指向已删除/无关目标，
+    /// 排序已保证最新的在最前，40 个凑不满 N 个说明真的没有更多有效项。
     /// </summary>
     private static List<string> GetRecentFolders(int max)
     {
+        if (_recentCache is { } cached && (DateTime.UtcNow - _recentCacheUtc).TotalSeconds < 30)
+            return cached;
+
         var result = new List<string>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -190,9 +236,10 @@ internal static class RecentFoldersProvider
                 .GetFiles("*.lnk")
                 .OrderByDescending(f => f.LastWriteTime);
 
+            int attempts = 0;
             foreach (var lnk in lnkFiles)
             {
-                if (result.Count >= max)
+                if (result.Count >= max || ++attempts > 40)
                     break;
 
                 var target = ShellLinkResolver.ResolveTarget(lnk.FullName);
@@ -215,6 +262,8 @@ internal static class RecentFoldersProvider
             // 忽略，返回目前已经收集到的结果
         }
 
+        _recentCache = result;
+        _recentCacheUtc = DateTime.UtcNow;
         return result;
     }
 

@@ -5,6 +5,7 @@
     <!-- ============ 悬浮窗 ============ -->
     <sys:String x:Key="Overlay.Title">快速跳转</sys:String>
     <sys:String x:Key="Overlay.TabFavorites">收藏</sys:String>
+    <sys:String x:Key="Overlay.TabHistory">历史</sys:String>
     <sys:String x:Key="Overlay.TabRecent">最近</sys:String>
     <sys:String x:Key="Overlay.LocationCount">{0} 个位置</sys:String>
     <sys:String x:Key="Overlay.SearchHint">搜索 Everything（回车取第一条）</sys:String>
@@ -42,6 +43,8 @@
     <sys:String x:Key="Tray.EsEnabled">Everything 搜索：已启用</sys:String>
     <sys:String x:Key="Tray.EsHidden">Everything 搜索：搜索框已停用</sys:String>
     <sys:String x:Key="Tray.ChooseEs">选择 es.exe…</sys:String>
+    <sys:String x:Key="Tray.History">浏览历史</sys:String>
+    <sys:String x:Key="Tray.HistoryToggle">显示历史页签</sys:String>
     <sys:String x:Key="Tray.Exit">退出</sys:String>
     <sys:String x:Key="Tray.BalloonTitle">FolderJumpTool</sys:String>
     <sys:String x:Key="Tray.BalloonBody">正在运行：在任意程序按 Ctrl+O / Ctrl+S 试试跳转</sys:String>
