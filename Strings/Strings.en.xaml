@@ -12,6 +12,7 @@
     <sys:String x:Key="Overlay.ClearSearch">Clear search</sys:String>
     <sys:String x:Key="Overlay.EmptyHint">No folders available&#x0a;Open a few Explorer windows, or edit your favorites file</sys:String>
     <sys:String x:Key="Overlay.NoResults">No matching results</sys:String>
+    <sys:String x:Key="Overlay.SearchTimeout">Search timed out — try again&#x0a;(Everything may be unresponsive or rebuilding its index)</sys:String>
     <sys:String x:Key="Overlay.AddFav">Add to favorites</sys:String>
     <sys:String x:Key="Overlay.RemoveFav">Remove from favorites</sys:String>
     <sys:String x:Key="Overlay.Dismiss">Dismiss this overlay (won't show for this dialog until it closes)</sys:String>

@@ -161,6 +161,7 @@
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
                         <!-- 放大镜（占位不挡输入） -->
@@ -197,9 +198,28 @@
                                        Margin="4,0,0,0"/>
                         </Grid>
 
+                        <!-- 搜索中指示：转圈。查询跑在后台线程，没有这个指示时
+                             "正在搜索"和"卡死了"在界面上完全一样——这是用户感知的关键。
+                             旋转动画由 code-behind 起停（DoubleAnimation 0→360 循环）。 -->
+                        <TextBlock x:Name="SearchSpinner"
+                                   Grid.Column="2"
+                                   Visibility="Collapsed"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="11"
+                                   Text="&#xE72C;"
+                                   Foreground="{DynamicResource AccentBrush}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,4,0"
+                                   IsHitTestVisible="False"
+                                   RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <RotateTransform x:Name="SearchSpinnerRotate" Angle="0"/>
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+
                         <!-- 清空按钮：有字才出现，点一下回到收藏列表 -->
                         <Button x:Name="ClearButton"
-                                Grid.Column="2"
+                                Grid.Column="3"
                                 Visibility="Collapsed"
                                 Margin="2,0,5,0"
                                 VerticalAlignment="Center"
@@ -292,6 +312,10 @@
                        Margin="2,2,2,4"
                        Fill="{DynamicResource DividerBrush}"/>
 
+            <!-- 列表高度上限 8 行（240px = 8 × 行高 30），内容少时列表自己变矮、下方不留白。
+                 超过 8 行（历史最多 20 条、收藏不限条数）就靠右侧那条细滚动条查看。
+                 用 MaxHeight 而非 Height：固定值会让只有两三条的页签下面空出一大块。
+                 屏幕上下空间不足时由 FollowDialog 再往下收紧（见 OverlayWindow.xaml.cs）。 -->
             <ScrollViewer x:Name="ListScroller"
                           MaxHeight="240"
                           VerticalScrollBarVisibility="Auto"
@@ -424,6 +448,17 @@
                        FontSize="12"
                        Foreground="{DynamicResource PathForegroundBrush}"
                        TextAlignment="Center"
+                       Margin="10,8"/>
+            <!-- 搜索超时/失败：必须与"无匹配结果"分开提示。Everything 本身卡住/索引重建时
+                 我们无法修复，但至少要说清是"没搜完"而不是"没搜到"，并引导重试。 -->
+            <TextBlock x:Name="EmptyHintTimeout"
+                       Text="{DynamicResource Overlay.SearchTimeout}"
+                       Visibility="Collapsed"
+                       FontSize="12"
+                       Foreground="{DynamicResource PathForegroundBrush}"
+                       TextAlignment="Center"
+                       TextWrapping="Wrap"
+                       LineHeight="18"
                        Margin="10,8"/>
         </StackPanel>
     </Border>

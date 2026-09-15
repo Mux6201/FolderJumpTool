@@ -51,6 +51,25 @@ internal static class ShellIcons
         return icon;
     }
 
+    /// <summary>
+    /// 预热：做一次真实提取，把进程内 Shell 图标子系统（首次 SHGetFileInfo 会初始化
+    /// 图标缓存与各类图标处理器）的初始化成本提前到程序启动阶段的后台线程，
+    /// 避免第一次搜索的结果列表渲染时，在 UI 线程上集中付出这笔开销。失败静默。
+    /// </summary>
+    public static void WarmUp()
+    {
+        try
+        {
+            var probe = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            if (!string.IsNullOrEmpty(probe))
+                _ = Get(probe, isDirectory: true);
+        }
+        catch
+        {
+            // 预热失败不影响功能（真正取图标时还会再试）
+        }
+    }
+
     private static ImageSource? Extract(string path, bool isDirectory)
     {
         var shfi = new NativeMethods.SHFILEINFO();

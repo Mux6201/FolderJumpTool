@@ -22,7 +22,9 @@ namespace FolderJumpTool;
 /// </summary>
 internal static class HistoryStore
 {
-    private const int MaxEntries = 20;
+    /// <summary>历史最多保留的条数。悬浮窗"历史"页按这个值取满显示（不再截成 8 条一屏），
+    /// 所以这里是"历史能看到多少"的唯一来源，要调容量只改这一处。</summary>
+    internal const int MaxEntries = 20;
     private const int ExistsCacheSoftLimit = 256;
 
     private static readonly object Gate = new();

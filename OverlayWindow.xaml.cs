@@ -32,6 +32,14 @@ public partial class OverlayWindow : Window
     /// <summary>查询序号，用于丢弃过期结果（旧查询晚到不能覆盖新关键词的结果）。</summary>
     private int _searchSeq;
 
+    /// <summary>搜索中转圈动画（0→360 循环）。静态复用：同一动画对象可被 BeginAnimation
+    /// 反复挂载，无需每次查询新建。</summary>
+    private static readonly DoubleAnimation SpinAnimation =
+        new(0, 360, new Duration(TimeSpan.FromMilliseconds(900)))
+        {
+            RepeatBehavior = RepeatBehavior.Forever,
+        };
+
     /// <summary>全局热键 Ctrl+G 的注册 ID；0 = 未注册（不可见时不注册，避免吞掉其他程序的 Ctrl+G）。</summary>
     private int _hotkeyId;
 
@@ -214,8 +222,10 @@ public partial class OverlayWindow : Window
 
         var favorites = FavoritesManager.Load();
         // 历史页只在开关开启时构建（记录不受开关影响，始终在后台进行）
+        // 取满存储上限：历史上限之外的条目本来就不存在，这里不该再截一刀
+        // （之前写死 8 条，正好一屏，导致更早的记录虽已存下却翻不到）。
         var historyItems = _showHistoryTab
-            ? RecentFoldersProvider.GetHistory(8)
+            ? RecentFoldersProvider.GetHistory(HistoryStore.MaxEntries)
             : new List<FavoriteFolder>();
 
         var recentItems = favorites.Count == 0
@@ -317,6 +327,7 @@ public partial class OverlayWindow : Window
     {
         _searchDebounce.Stop();
         _searchSeq++; // 作废上一会话在途的 es 查询，防止迟到的结果写回新会话列表
+        SetSearchBusy(false); // 新会话 = 上一会话的搜索作废，转圈立即收掉（在途结果会被序号丢弃）
 
         if (SearchBox.Text.Length > 0)
         {
@@ -357,13 +368,16 @@ public partial class OverlayWindow : Window
         _ => 0,
     };
 
-    /// <summary>列表为空时显示对应来源的空状态提示（普通/搜索），并收起列表本身。</summary>
-    private void UpdateEmptyHint(bool searchMode)
+    /// <summary>列表为空时显示对应来源的空状态提示（普通/搜索）并收起列表本身。
+    /// 搜索模式下的空列表有两种含义，必须分开提示：确实是没匹配（"没有找到"）与
+    /// 查询超时/失败（"超时请重试"）——把后者说成前者会让用户误以为真的没有这个路径。</summary>
+    private void UpdateEmptyHint(bool searchMode, bool timedOut = false)
     {
         bool empty = CurrentCount() == 0;
         FavoritesList.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
         EmptyHintFav.Visibility = empty && !searchMode ? Visibility.Visible : Visibility.Collapsed;
-        EmptyHintSearch.Visibility = empty && searchMode ? Visibility.Visible : Visibility.Collapsed;
+        EmptyHintSearch.Visibility = empty && searchMode && !timedOut ? Visibility.Visible : Visibility.Collapsed;
+        EmptyHintTimeout.Visibility = empty && searchMode && timedOut ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>搜索框文字变化：清空恢复收藏/最近；有字则去抖后查询 Everything。
@@ -380,6 +394,7 @@ public partial class OverlayWindow : Window
         if (string.IsNullOrWhiteSpace(SearchBox.Text))
         {
             _searchDebounce.Stop();
+            SetSearchBusy(false); // 清空 = 放弃搜索意图，转圈立即收掉（在途查询回来会因序号过期被丢弃）
             RefreshCandidates();
             return;
         }
@@ -427,22 +442,55 @@ public partial class OverlayWindow : Window
         var seq = ++_searchSeq;
         var es = _esPath;
         var foldersOnly = _dialogKind == DialogKind.FolderPicker;
+        SetSearchBusy(true); // 起转圈：查询在后台线程跑，界面本身不阻塞，转圈是唯一的"在干活"信号
         // 结果取 40 条再本地排序（Everything 只保证自己的排序，跳转相关性要客户端重排），
-        // 列表可视高度 8 行，多的滚动查看。
+        // 列表最多 8 行（240px），多的滚动查看。
         _ = Task.Run(() => EverythingSearch.Search(es, keyword, 40, foldersOnly))
             .ContinueWith(t => Dispatcher.BeginInvoke(new Action(() =>
             {
                 if (_searchSeq != seq)
-                    return; // 已有更新的查询，这次的结果过期，丢弃
+                    return; // 已有更新的查询，这次的结果过期，丢弃（转圈由那次查询负责收尾）
 
-                var items = t.IsCompletedSuccessfully
+                // 任务异常（极少）也按"没搜完"处理：给超时/重试提示，而不是谎报无结果。
+                var outcome = t.IsCompletedSuccessfully
                     ? t.Result
-                    : new List<FavoriteFolder>();
-                MarkFavorites(items);
-                FavoritesList.ItemsSource = items;
+                    : new SearchOutcome(new List<FavoriteFolder>(), TimedOut: true);
+
+                // 回填耗时留痕：这一段是 UI 线程上的同步工作（读收藏夹 + 40 行图标提取 +
+                // 列表测量）。只在超阈值时写日志，把"es 查询慢"与"回填渲染慢"区分开。
+                var uiSw = System.Diagnostics.Stopwatch.StartNew();
+                MarkFavorites(outcome.Items);
+                FavoritesList.ItemsSource = outcome.Items;
                 _navIndex = -1; // 搜索结果替换列表，键盘选中索引归零
-                UpdateEmptyHint(searchMode: true);
+                UpdateEmptyHint(searchMode: true, timedOut: outcome.TimedOut);
+                uiSw.Stop();
+                if (uiSw.ElapsedMilliseconds >= 200)
+                    Log.Info($"[OverlayWindow] 搜索回填 UI 耗时 {uiSw.ElapsedMilliseconds}ms"
+                        + $"（{outcome.Items.Count} 条，含图标提取/列表测量）");
+
+                SetSearchBusy(false); // 收尾：结果已就位或已判定超时，转圈停止
             })));
+    }
+
+    /// <summary>
+    /// 搜索进行中：搜索条右侧显示转圈并起旋转动画；查询结束（有结果 / 超时 / 失败）即停。
+    /// 这是"别让用户以为程序死了"的关键——查询本来就在后台线程跑、界面不阻塞，
+    /// 但如果没有任何指示，"正在搜"和"卡死了"在界面上完全一样。
+    /// 有硬超时兜底（EverythingSearch.QueryTimeoutMs + 解析预算），转圈一定会停。
+    /// </summary>
+    private void SetSearchBusy(bool busy)
+    {
+        if (busy)
+        {
+            SearchSpinner.Visibility = Visibility.Visible;
+            SearchSpinnerRotate.BeginAnimation(RotateTransform.AngleProperty, SpinAnimation);
+        }
+        else
+        {
+            SearchSpinner.Visibility = Visibility.Collapsed;
+            SearchSpinnerRotate.BeginAnimation(RotateTransform.AngleProperty, null);
+            SearchSpinnerRotate.Angle = 0;
+        }
     }
 
     /// <summary>搜索框键盘操作（候选列表与搜索结果共用同一列表，键盘导航两者通用）：
@@ -721,9 +769,9 @@ public partial class OverlayWindow : Window
         // 顶部要"再贴一些"就把 gap 往下压；留 1px 避免零间隙显得粘滞。
         const int gap = 1;
 
-        // 自适应限高：候选很多（搜索模式最多 20 条）时列表区不能无限长。
-        // 基础可视上限 240px（≈8 行 x 30px/行，用户指定"压缩到 8 条左右"），
-        // 再按对话框上/下可用的屏幕空间收紧——
+        // 自适应限高：列表最多 8 行（240px），内容少时列表自己变矮、下方不留白。
+        // 这里只负责"屏幕空间不够时再往下压小"——上限就是 8 行的 240px（不再放大），
+        // 按对话框上/下可用的屏幕空间收紧——
         // 取两侧可用空间较大的一侧，减去标题行等固定开销（约 44px），
         // 保证悬浮窗总高不超过它最终落脚那侧的可用区域（下方不够会翻到上方）。
         // 留 96px 下限，避免对话框几乎占满屏幕时悬浮窗被压到只剩一条。

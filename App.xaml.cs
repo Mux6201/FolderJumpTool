@@ -159,6 +159,18 @@ public partial class App : System.Windows.Application
         _searchEnabled = SettingsStore.Get("searchEnabled", "true") != "false";
         _overlay.EnableSearch(_searchEnabled ? _esPath : null);
 
+        // 后台预热：把 es.exe 进程冷启动 + Everything 的 IPC 首次握手，以及进程内 Shell
+        // 图标子系统的首初始化，都提前到启动阶段完成（后台线程、不阻塞启动、用户无感）。
+        // 这是"第一次搜索要卡一下、之后又正常"的根治手段——冷启动成本被挪到没人注意的时刻；
+        // 预热失败静默，真正搜索时会自动重试，不影响任何功能。
+        var warmEs = _esPath;
+        _ = Task.Run(() =>
+        {
+            if (warmEs != null)
+                EverythingSearch.WarmUp(warmEs);
+            ShellIcons.WarmUp();
+        });
+
         // 浏览历史：记录始终在后台进行（关掉的资源管理器文件夹也能在"历史"页找回）；
         // showHistoryTab 只管"历史"页签显不显示，关掉页签不会丢历史。
         _showHistoryTab = SettingsStore.Get("showHistoryTab", "true") != "false";
