@@ -1,7 +1,8 @@
 name: release
 
 on:
-  # 正式发版：推送 v* 标签触发（构建 + 创建 draft Release）
+  # 正式发版：推送 v* 标签触发（构建 + 直接发布 Release）
+  # 发布说明取仓库里的 .github/release-notes/<tag>.md；发版前先写好它，见下方 Resolve release notes。
   push:
     tags: ['v*']
   # 手动构建：网页 Actions → release → Run workflow，填版本号即可出产物
@@ -80,7 +81,24 @@ jobs:
             FolderJumpTool-*.zip
             FolderJumpTool-*-SHA256.txt
 
+      # 发布说明来源：仓库内 .github/release-notes/<tag>.md（手写中文 Notes）。
+      # 好处是发版前说明已经在仓库里了——不必再用 API 从外部回填 Notes，
+      # 整条发版链因此不再依赖任何长期 PAT（写权限由 Actions 自动提供的 token 承担）。
+      - name: Resolve release notes
+        id: notes
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          f=".github/release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$f" ]; then
+            echo "body_path=$f" >> "$GITHUB_OUTPUT"
+            echo "使用发布说明文件：$f"
+          else
+            echo "未找到 $f —— 回退到 GitHub 自动生成的说明"
+          fi
+
       # 只有 tag 推送才创建 Release（手动触发在分支上，没有 tag 可供关联）。
+      # draft: false —— 说明已在仓库里备好，流水线直接发布，不需要人工再点 Publish。
       - name: Create GitHub Release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
@@ -88,5 +106,6 @@ jobs:
           files: |
             FolderJumpTool-*.zip
             FolderJumpTool-*-SHA256.txt
-          generate_release_notes: true
-          draft: true
+          body_path: ${{ steps.notes.outputs.body_path }}
+          generate_release_notes: ${{ steps.notes.outputs.body_path == '' }}
+          draft: false
