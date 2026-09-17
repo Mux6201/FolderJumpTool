@@ -32,6 +32,12 @@ public partial class OverlayWindow : Window
     /// <summary>查询序号，用于丢弃过期结果（旧查询晚到不能覆盖新关键词的结果）。</summary>
     private int _searchSeq;
 
+    /// <summary>FollowDialog 正在执行中。为什么要这个标志：Show() / UpdateLayout() 内部会泵
+    /// 消息，期间 SizeChanged 事件又会回调进 FollowDialog，于是**一次显示流程里算出两次位置、
+    /// 互相覆盖**——实测两次用的矩形能差上千像素，用户看到的就是"贴着旧位置闪一下，再跳到
+    /// 对话框旁边"。用标志挡住重入，保证一次只算一次位置。</summary>
+    private bool _following;
+
     /// <summary>搜索中转圈动画（0→360 循环）。静态复用：同一动画对象可被 BeginAnimation
     /// 反复挂载，无需每次查询新建。</summary>
     private static readonly DoubleAnimation SpinAnimation =
@@ -750,7 +756,34 @@ public partial class OverlayWindow : Window
     /// </summary>
     internal void FollowDialog(IntPtr dialogHwnd, NativeMethods.RECT dialogRect)
     {
+        // 防重入（见 _following 注释）：Show() / UpdateLayout() 会泵消息，SizeChanged
+        // 会在这期间回调进来，导致一次显示流程算出两个位置、互相覆盖。
+        // 重入这次直接丢掉——外层流程本来就会把位置算完。
+        if (_following)
+        {
+            Log.Info("[FolderJumpTool] FollowDialog 重入被挡（Show/UpdateLayout 引发的回调）");
+            return;
+        }
+
+        _following = true;
+        try
+        {
+            FollowDialogInternal(dialogHwnd, dialogRect);
+        }
+        finally
+        {
+            _following = false;
+        }
+    }
+
+    /// <summary>真正的定位计算（由 FollowDialog 包壳调用，不要在别处直接调）。</summary>
+    private void FollowDialogInternal(IntPtr dialogHwnd, NativeMethods.RECT dialogRect)
+    {
         _targetDialog = dialogHwnd;
+
+        // 注意：这里刻意**不做节流**。曾经试过按 ~60fps 丢帧，结果跟随变成一跳一跳地追
+        // （拖动时 LOCATIONCHANGE 是连续来的，丢掉中间帧就断了连续性），用户直接反馈"抖动"。
+        // 原版每条都执行反而是顺的 —— 保持原样，别再优化这一块。
 
         // 位置和上次完全一样就不用重复算/重复打日志了，
         // 位置同步定时器每 150ms 跑一次，大部分时候对话框根本没动。
@@ -845,6 +878,34 @@ public partial class OverlayWindow : Window
         left = Math.Max(screenLeft, Math.Min(left, screenLeft + screenWidth - actualWidth));
         top = Math.Max(screenTop, Math.Min(top, screenTop + screenHeight - actualHeight));
 
+        // 位置留痕（只在明显变化时记）：用来分辨"悬浮窗跳一下"到底是对话框矩形变了，
+        // 还是我们自己的尺寸/对齐算出了不同结果。两条信息一起打，一眼能分清责任方。
+        if (IsVisible && (Math.Abs(Left - left) > 20 || Math.Abs(Top - top) > 20))
+        {
+            // 顺带记录窗口的"恢复位置"：文件对话框初始化时会先以默认尺寸出现、随后才恢复
+            // 上次的尺寸/位置，如果 NormalPosition 在早期就已是最终值，就能拿它当对齐基准。
+            // 这里只做对比留痕（打日志），暂不参与实际计算。
+            var normalPart = NativeMethods.GetNormalRect(dialogHwnd, out var norm)
+                ? $" 恢复位置 {norm.Left},{norm.Top} {norm.Width}x{norm.Height}"
+                : " 恢复位置 (不可用)";
+
+            Log.Info($"[FolderJumpTool] 悬浮窗位置 {Left:0},{Top:0} → {left:0},{top:0}"
+                + $"（目标 hwnd={dialogHwnd} 矩形 {dialogRect.Left},{dialogRect.Top}"
+                + $" {dialogRect.Width}x{dialogRect.Height}{normalPart}，悬浮窗 {actualWidth:0}x{actualHeight:0}）");
+        }
+
+        // 位置一律"立即落位"，**不要挂动画**（此处踩过两次坑，改前先读）：
+        //   · 拖动对话框时 LOCATIONCHANGE 每几毫秒一次，动画会被不断打断重启，
+        //     表现为"跟随又卡又慢"；
+        //   · 更麻烦的是 WPF 里**动画优先级高于直接赋值**——动画还在跑时 `Left = x`
+        //     会被忽略，窗口跟着动画走、与目标值互相打架，表现为**抖动**。
+        //   · 另外，`BeginAnimation(prop, null)` 会把手持值退回动画前的 base value，
+        //     所以这里每次都先清一次动画再赋值，避免残留动画影响。
+        // 真正要消除的是"对话框初始化时恢复尺寸导致位置变化"（居中/靠右对齐下宽度影响位置）。
+        // 那是**对齐基准**的问题：若嫌它跳，把对齐方式换成靠左/靠右即可——位置只取决于
+        // 对话框左/右边缘，与宽度无关，自然不会跳。
+        BeginAnimation(LeftProperty, null);
+        BeginAnimation(TopProperty, null);
         Left = left;
         Top = top;
     }

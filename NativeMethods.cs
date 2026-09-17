@@ -144,6 +144,43 @@ internal static class NativeMethods
         return GetWindowRect(hwnd, out rect);
     }
 
+    // ---------- 窗口"恢复位置"（诊断对话框初始化期间的尺寸变化）----------
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct POINT
+    {
+        public int X, Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    public struct WINDOWPLACEMENT
+    {
+        public int Length;
+        public int Flags;
+        public int ShowCmd;
+        public POINT MinPosition;
+        public POINT MaxPosition;
+        public RECT NormalPosition;
+    }
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+    /// <summary>
+    /// 取窗口的"恢复位置"（NormalPosition）。用途是诊断：文件对话框初始化时会先以
+    /// 默认尺寸出现、随后才恢复上次的尺寸/位置，而 NormalPosition 有可能在窗口还没
+    /// 最终定位时就已经是最终值——若成立，它就能当作"目标位置"来对齐，免去等待。
+    /// </summary>
+    public static bool GetNormalRect(IntPtr hwnd, out RECT rect)
+    {
+        rect = default;
+        var wp = new WINDOWPLACEMENT { Length = Marshal.SizeOf<WINDOWPLACEMENT>() };
+        if (!GetWindowPlacement(hwnd, ref wp))
+            return false;
+        rect = wp.NormalPosition;
+        return true;
+    }
+
     // ---------- 悬浮窗不抢焦点用 ----------
 
     public const int GWL_EXSTYLE = -20;

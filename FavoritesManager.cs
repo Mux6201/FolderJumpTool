@@ -62,16 +62,44 @@ internal static class FavoritesManager
     private static readonly string StoreFile = System.IO.Path.Combine(StoreDir, "favorites.json");
 
     /// <summary>用户持久化的收藏列表；文件不存在/空/损坏时返回空列表（不是默认项）。</summary>
+    /// <summary>
+    /// 收藏夹文件缓存。Load() 调用非常频繁（列表刷新、绑定候选、逐项判断是否已收藏），
+    /// 而每次都读文件 + JSON 反序列化——在负载高、开着实时杀软的机器上，这一串文件访问
+    /// 会被成倍放大，是"界面慢半拍"的隐形来源。这里按文件最后写入时间缓存：文件没动
+    /// 就直接用上次结果（读元数据比读全文 + 解析便宜得多）。Save() 会立即让缓存失效。
+    /// 返回的是新列表（浅拷贝），调用方可自由增删，不会影响缓存本身。
+    /// </summary>
+    private static List<FavoriteFolder>? _loadCache;
+    private static DateTime _loadCacheStampUtc;
+    private static readonly object LoadCacheGate = new();
+
     public static List<FavoriteFolder> Load()
     {
         try
         {
             if (!File.Exists(StoreFile))
+            {
+                lock (LoadCacheGate)
+                    _loadCache = null;
                 return new List<FavoriteFolder>();
+            }
+
+            var stamp = File.GetLastWriteTimeUtc(StoreFile);
+            lock (LoadCacheGate)
+            {
+                if (_loadCache != null && stamp == _loadCacheStampUtc)
+                    return new List<FavoriteFolder>(_loadCache);
+            }
 
             var json = File.ReadAllText(StoreFile);
-            var list = JsonSerializer.Deserialize<List<FavoriteFolder>>(json);
-            return list ?? new List<FavoriteFolder>();
+            var list = JsonSerializer.Deserialize<List<FavoriteFolder>>(json) ?? new List<FavoriteFolder>();
+
+            lock (LoadCacheGate)
+            {
+                _loadCache = list;
+                _loadCacheStampUtc = stamp;
+            }
+            return new List<FavoriteFolder>(list);
         }
         catch
         {
@@ -88,6 +116,11 @@ internal static class FavoritesManager
         Directory.CreateDirectory(StoreDir);
         var json = JsonSerializer.Serialize(favorites, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(StoreFile, json);
+
+        // 写完立刻让读缓存失效：不能靠时间戳比较（同一毫秒内的写入可能看不出差异），
+        // 否则刚收藏的条目在下次刷新时可能还读到旧快照。
+        lock (LoadCacheGate)
+            _loadCache = null;
     }
 
     public static bool IsFavorite(string path)

@@ -32,6 +32,33 @@ public partial class App : System.Windows.Application
         Interval = TimeSpan.FromMilliseconds(250),
     };
 
+    /// <summary>看门狗发现"对话框不见了"的起始时刻（Environment.TickCount64）；0 = 目前未见异常。
+    /// 为什么要这个：文件对话框初始化时会出现"先显示一下 → 随即隐藏 → 重新定位后再显示"，
+    /// 若一发现不可见就收起悬浮窗，用户看到的就是"贴着旧位置闪一下，再跳到对话框旁边"。
+    /// 所以给它一个宽限期，期间窗口恢复就当作什么都没发生。
+    /// 真正关闭时走 DialogClosed / DialogDeactivated 那两条路立即收起，不受这里影响。</summary>
+    private long _dialogGoneSince;
+
+    /// <summary>看门狗宽限期（毫秒）：短于此的"消失"视为对话框初始化过程中的暂时隐藏。</summary>
+    private const long ZombieGraceMs = 400;
+
+    /// <summary>正在等待对话框定位稳定（ShowOverlayWhenStable 的采样期间）。
+    /// 这期间收到的"移动"事件是对话框自身初始化时的挪动、不是用户拖动，
+    /// 跟随它只会把悬浮窗甩来甩去，所以 DialogMoved 在此期间一律忽略。</summary>
+    private bool _awaitingStablePosition;
+
+    /// <summary>定位稳定采样的间隔（毫秒）。越小越灵敏，但采样本身也是一次窗口查询。</summary>
+    private const int StableSampleMs = 60;
+
+    /// <summary>等待对话框定位稳定的上限（毫秒）。超过就用当时的位置兜底显示，
+    /// 避免个别总在微调的窗口把悬浮窗一直拖住不显示。</summary>
+    private const int MaxStableWaitMs = 480;
+
+    /// <summary>判定"定位完成"需要连续几次采样一致。取 3（≈180ms）：只比 2 次更稳，
+    /// 因为对话框有可能恰好在两次采样之间没动、随后才继续挪，2 次会误判。</summary>
+    private const int RequiredStableSamples = 3;
+
+
     /// <summary>浏览历史兜底采样：主渠道是事件驱动（资源管理器窗口标题变化，
     /// 见 DialogEventWatcher.ExplorerWindowChanged），这里只做低频兜底，
     /// 防个别导航场景不触发标题变化而漏记。没开资源管理器窗口时零成本。</summary>
@@ -184,12 +211,17 @@ public partial class App : System.Windows.Application
         // 这是程序唯一的可见存在感 + 退出入口（无主窗口）。
         SetupTrayIcon();
 
-        _watcher.DialogOpened += hwnd =>
+        _watcher.DialogOpened += (hwnd, kind) =>
         {
             Dispatcher.Invoke(() =>
             {
+                // 从这里到 FollowDialog() 是纯同步路径（分类 + 清会话 + 重建候选列表都在 UI 线程），
+                // 它慢多少，悬浮窗就"慢半拍"多少 —— 留一条超阈值日志，便于直接看清是这一段的问题。
+                var prepSw = System.Diagnostics.Stopwatch.StartNew();
                 _dialogHwnd = hwnd;
-                _dialogKind = DialogNavigator.ClassifyDialog(hwnd);
+                // 分类结果由 watcher 带进来（它本来就得分类一次才能确认是文件对话框），
+                // 这里不再重复枚举子控件——那一步要跨进程读每个子控件的类名与文字。
+                _dialogKind = kind;
 
                 // 停用名单命中：该对话框被用户手动关掉悬浮窗（标题行 ×）。
                 // 仍登记状态（供 DialogClosed 清除名单），但不显示、不延迟复查。
@@ -213,10 +245,11 @@ public partial class App : System.Windows.Application
                 if (isForeground)
                 {
                     _dialogIsForeground = true;
-                    // 用视觉矩形（GetVisualRect 剔除 DWM 阴影装饰），悬浮窗贴"看得见的边"
-                    if (NativeMethods.GetVisualRect(hwnd, out var rect))
-                        _overlay.FollowDialog(hwnd, rect);
-                    Log.Info($"[FolderJumpTool] DialogOpened hwnd={hwnd} kind={_dialogKind} 前台=对话框 → 立即显示");
+                    // 不跟当前矩形立刻显示：文件对话框初始化时会"先出现 → 挪动/被隐藏 →
+                    // 定位完成"，跟瞬时位置跑会让悬浮窗先落在错的地方再跳过去（位置突变）。
+                    // 交给 ShowOverlayWhenStable 等定位稳定后一步到位。
+                    ShowOverlayWhenStable(hwnd, prepSw.ElapsedMilliseconds);
+                    Log.Info($"[FolderJumpTool] DialogOpened hwnd={hwnd} kind={_dialogKind} 前台=对话框 → 等定位稳定后显示");
                 }
                 else
                 {
@@ -244,10 +277,70 @@ public partial class App : System.Windows.Application
                     return;
                 }
                 _dialogIsForeground = true;
-                if (NativeMethods.GetVisualRect(hwnd, out var rect))
-                    _overlay.FollowDialog(hwnd, rect);
-                Log.Info($"[FolderJumpTool] DialogOpened 延迟复查: hwnd={hwnd} 已是前台 → 显示");
+                Log.Info($"[FolderJumpTool] DialogOpened 延迟复查: hwnd={hwnd} 已是前台 → 等定位稳定后显示");
+                ShowOverlayWhenStable(hwnd);
             });
+        }
+
+        /// <summary>
+        /// 等对话框位置稳定后再把悬浮窗摆上去。
+        ///
+        /// 为什么不能直接跟着"此刻的矩形"显示：文件对话框初始化时会经历
+        /// "先出现 → 挪动/被隐藏 → 定位完成"，跟着这个瞬时位置跑，悬浮窗就会先落在
+        /// 错误的地方、随后再跳过去——也就是用户看到的"位置突变"。
+        /// 这里按 StableSampleMs 连续采样视觉矩形，连续两次一致即认为定位完成，
+        /// 一步到位地显示在最终位置；一直不稳定就等到 MaxStableWaitMs 上限，
+        /// 用最后采到的位置兜底（宁可位置略偏，也不能一直不显示）。
+        /// </summary>
+        /// <param name="prepMs">进入显示流程前已花费的时间（分类 + 候选列表重建），仅用于日志。</param>
+        async void ShowOverlayWhenStable(IntPtr hwnd, long prepMs = 0)
+        {
+            if (!NativeMethods.GetVisualRect(hwnd, out var prev))
+                return;
+
+            // 采样期间屏蔽 DialogMoved：否则对话框自己挪动时那条路会先把悬浮窗显示出来，
+            // 就等于没等（悬浮窗仍旧先落错位置再跳）。
+            _awaitingStablePosition = true;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                var stableCount = 0;
+                while (sw.ElapsedMilliseconds < MaxStableWaitMs)
+                {
+                    await Task.Delay(StableSampleMs);
+
+                    if (_dialogHwnd != hwnd || !NativeMethods.IsWindow(hwnd))
+                        return; // 目标已换或已关闭
+                    if (!NativeMethods.GetVisualRect(hwnd, out var rect))
+                        return;
+
+                    if (rect.Left == prev.Left && rect.Top == prev.Top &&
+                        rect.Right == prev.Right && rect.Bottom == prev.Bottom)
+                    {
+                        if (++stableCount >= RequiredStableSamples)
+                            break; // 连续多次一致 = 定位完成
+                    }
+                    else
+                    {
+                        stableCount = 0; // 又动了，重新数
+                        prev = rect;
+                    }
+                }
+
+                if (_dialogHwnd != hwnd || !NativeMethods.IsWindow(hwnd))
+                    return;
+
+                if (NativeMethods.GetVisualRect(hwnd, out var final))
+                    _overlay.FollowDialog(hwnd, final);
+
+            }
+            finally
+            {
+                _awaitingStablePosition = false;
+            }
+
+            Log.Info($"[FolderJumpTool] 悬浮窗已就位 hwnd={hwnd}"
+                + $"（捕获准备 {prepMs}ms + 等定位 {sw.ElapsedMilliseconds}ms）");
         }
 
         /// <summary>前台窗口是否是目标对话框（或对话框弹出的附属小窗，如重命名输入框）。</summary>
@@ -267,6 +360,13 @@ public partial class App : System.Windows.Application
                 _dialogIsForeground = false;
                 return;
             }
+
+            // 只在"等定位稳定"的采样期间屏蔽跟随：那几帧里的"移动"是对话框自身的初始化挪动，
+            // 跟随不但会甩窗口，还会绕过等待逻辑把窗口提前显示在错位置。
+            // 注意：曾经还加过一段"摆好后 700ms 内锁定位置"的逻辑，已删除——它会让拖动在
+            // 头 700ms 内完全不跟、到期后猛跳一下，是纯负担。
+            if (_awaitingStablePosition)
+                return;
 
             // 只有对话框还是前台窗口时才跟着重新定位/显示；
             // 否则失焦隐藏之后，这个每 150ms 触发一次的位置同步会把悬浮窗又弹出来。
@@ -302,8 +402,14 @@ public partial class App : System.Windows.Application
                     return;
                 }
                 _dialogIsForeground = true;
-                _dialogHwnd = hwnd;
-                _dialogKind = DialogNavigator.ClassifyDialog(hwnd);
+                // 同一个窗口的对话框种类不会变（模式一旦确定就固定）→ 复用上次的分类结果。
+                // 原来每次切回都重新分类，而分类要枚举整棵子控件树并跨进程读每个子控件的
+                // 类名与文字，是"点回对话框、悬浮窗慢一下才跟上"的隐形开销。
+                if (hwnd != _dialogHwnd || _dialogKind == DialogKind.None)
+                {
+                    _dialogHwnd = hwnd;
+                    _dialogKind = DialogNavigator.ClassifyDialog(hwnd);
+                }
                 _overlay.SetDialogKind(_dialogKind);
                 // 对话框重新回到前台（典型场景：用户去新开了资源管理器窗口/tab 再点回对话框，
                 // 悬浮窗重新出现）——重新抓候选，让新窗口/激活 tab 按 Z 序自动置顶，
@@ -366,12 +472,33 @@ public partial class App : System.Windows.Application
         _zombieTimer.Tick += (_, _) =>
         {
             if (_overlay == null || !_overlay.IsVisible)
+            {
+                _dialogGoneSince = 0;
                 return;
+            }
+
             bool alive = _dialogHwnd != IntPtr.Zero &&
                          NativeMethods.IsWindow(_dialogHwnd) &&
                          NativeMethods.IsWindowVisible(_dialogHwnd);
             if (alive)
+            {
+                _dialogGoneSince = 0; // 一切都好，清掉计时
                 return;
+            }
+
+            // 宽限期（见 _dialogGoneSince 注释）：文件对话框初始化时会短暂隐藏再重新定位，
+            // 这段时间里"收起来又弹出来"就是用户看到的闪跳。先记下起点、按兵不动，
+            // 窗口恢复了就完全无感；确实一直不回来才收起。
+            var now = Environment.TickCount64;
+            if (_dialogGoneSince == 0)
+            {
+                _dialogGoneSince = now;
+                return;
+            }
+            if (now - _dialogGoneSince < ZombieGraceMs)
+                return;
+
+            _dialogGoneSince = 0;
             Log.Info($"[FolderJumpTool] 看门狗：对话框已消失 (hwnd={_dialogHwnd})，收起悬浮窗");
             _dialogHwnd = IntPtr.Zero;
             _dialogKind = DialogKind.None;

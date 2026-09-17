@@ -97,48 +97,15 @@ internal static class HistoryStore
         }
     }
 
-    /// <summary>映射盘符类型的缓存（'Z' → 是否网络盘），避免重复构造 DriveInfo。</summary>
-    private static readonly Dictionary<char, bool> DriveTypeCache = new();
-
-    /// <summary>
-    /// 路径是否位于网络位置——UNC（<c>\\server\share</c>，含"添加网络位置"）或
-    /// **映射的网络驱动器**（<c>Z:</c> → <c>\\NAS\share</c>，形态与本地盘完全一样，
-    /// 靠盘符判断不出来）。这类路径的 Exists 会走 SMB，离线时可能阻塞数百毫秒以上。
-    /// DriveInfo.DriveType 查的是本机驱动器类型（本地系统调用，不触网），开销可忽略。
-    /// </summary>
-    private static bool IsNetworkPath(string path)
-    {
-        if (path.StartsWith(@"\\", StringComparison.Ordinal))
-            return true;
-
-        // 形如 "Z:\..." 或 "Z:" 的盘符路径
-        if (path.Length >= 2 && path[1] == ':' && char.IsLetter(path[0]))
-        {
-            char letter = char.ToUpperInvariant(path[0]);
-            if (!DriveTypeCache.TryGetValue(letter, out bool network))
-            {
-                try
-                {
-                    network = new DriveInfo(path.Substring(0, 2)).DriveType == DriveType.Network;
-                }
-                catch
-                {
-                    network = false; // 查询失败（盘符不存在等）当本地处理
-                }
-                DriveTypeCache[letter] = network;
-            }
-            return network;
-        }
-
-        return false;
-    }
+    // 网络路径判断统一走 PathUtil.IsNetworkPath —— 候选列表构建、最近文档 .lnk 解析、
+    // 搜索结果类型判断都要用同一套逻辑，散在多处容易漂移。
 
     /// <summary>带 TTL 的存在性检查：60 秒内同一路径不重复问盘；网络位置直接放行。</summary>
     private static bool ExistsCached(string path)
     {
         // 网络位置跳过验证：网络盘离线时 Exists 可能阻塞数百毫秒甚至更久，
         // 而历史里存的多是用户常用位置——宁可显示一个暂时点不通的条目，也不卡住 UI 线程。
-        if (IsNetworkPath(path))
+        if (PathUtil.IsNetworkPath(path))
             return true;
 
         var now = DateTime.UtcNow;
@@ -177,7 +144,7 @@ internal static class HistoryStore
             return string.Empty;
 
         // 来源必然存在（如枚举到的资源管理器窗口）或网络位置（验证可能阻塞）→ 直接信任
-        if (skipValidation || IsNetworkPath(trimmed))
+        if (skipValidation || PathUtil.IsNetworkPath(trimmed))
             return trimmed;
 
         if (Directory.Exists(trimmed))

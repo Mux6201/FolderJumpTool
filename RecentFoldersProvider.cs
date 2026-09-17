@@ -23,7 +23,13 @@ internal static class RecentFoldersProvider
         {
             if (result.Count >= maxTotal)
                 return;
-            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            // 网络位置跳过存在性校验（见 PathUtil.IsNetworkPath）：对端离线或休眠时，
+            // Directory.Exists 会一直等到 SMB 超时（可达数十秒），而候选列表是每次弹
+            // 对话框都要构建的热路径——卡一次就是"悬浮窗过几秒才跟出来"。
+            // 宁可显示一个暂时点不通的条目，也不能让 UI 线程等在这里。
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+            if (!PathUtil.IsNetworkPath(path) && !Directory.Exists(path))
                 return;
             var normalized = path.TrimEnd('\\');
             if (!seen.Add(normalized))
@@ -57,7 +63,13 @@ internal static class RecentFoldersProvider
         {
             if (result.Count >= maxTotal)
                 return;
-            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            // 网络位置跳过存在性校验（见 PathUtil.IsNetworkPath）：对端离线或休眠时，
+            // Directory.Exists 会一直等到 SMB 超时（可达数十秒），而候选列表是每次弹
+            // 对话框都要构建的热路径——卡一次就是"悬浮窗过几秒才跟出来"。
+            // 宁可显示一个暂时点不通的条目，也不能让 UI 线程等在这里。
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+            if (!PathUtil.IsNetworkPath(path) && !Directory.Exists(path))
                 return;
             var normalized = path.TrimEnd('\\');
             if (!seen.Add(normalized))
@@ -246,7 +258,11 @@ internal static class RecentFoldersProvider
                 if (string.IsNullOrWhiteSpace(target))
                     continue;
 
-                string? folder = Directory.Exists(target) ? target
+                // 最近文档的 .lnk 目标也可能是网络路径（用户常从 NAS 上打开文件），
+                // 对端离线时 Exists 同样会卡到 SMB 超时 → 网络位置直接信任，
+                // 不再校验存在性（.lnk 既然存在，目标当初必然存在）。
+                string? folder = PathUtil.IsNetworkPath(target) ? target
+                    : Directory.Exists(target) ? target
                     : File.Exists(target) ? Path.GetDirectoryName(target)
                     : null;
 

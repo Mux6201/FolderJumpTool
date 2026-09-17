@@ -304,7 +304,7 @@ internal static class EverythingSearch
                 bool isDir;
                 if (path.EndsWith('\\'))
                     isDir = true;
-                else if (IsNetworkPath(folderPath))
+                else if (PathUtil.IsNetworkPath(folderPath))
                     isDir = false;
                 else
                     isDir = Directory.Exists(folderPath);
@@ -379,30 +379,8 @@ internal static class EverythingSearch
         return depth;
     }
 
-    /// <summary>
-    /// 是否为网络路径：UNC（\\server\share）或映射到网络位置的盘符。
-    /// 用途是避免对网络路径做 Directory.Exists —— 脱机/休眠的 NAS 上单次探测会一直
-    /// 等到 SMB 超时（数十秒），这是"搜索卡住"最隐蔽的来源。
-    /// DriveType 读的是已挂载卷的元数据，成本可忽略；探测失败也按网络路径处理，
-    /// 宁可图标退化为文件图标，也不冒阻塞界面/后台线程的风险。
-    /// </summary>
-    private static bool IsNetworkPath(string path)
-    {
-        if (path.StartsWith(@"\\", StringComparison.Ordinal))
-            return true; // UNC：\\server\share\...
-
-        if (path.Length < 2 || path[1] != ':')
-            return false;
-
-        try
-        {
-            return new DriveInfo(path.Substring(0, 2)).DriveType == DriveType.Network;
-        }
-        catch
-        {
-            return true; // 盘符不存在/无权限：同样不去探它
-        }
-    }
+    // 网络路径判断统一走 PathUtil.IsNetworkPath（候选列表构建、最近文档解析、
+    // 浏览历史校验、搜索结果类型判断共用一套，避免逻辑漂移）。
 
     /// <summary>
     /// es.exe 的输出编码不固定（受控制台代码页影响），这里做兼容：

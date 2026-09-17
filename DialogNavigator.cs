@@ -109,10 +109,23 @@ internal static class DialogNavigator
     private static IntPtr _lastDumpHwnd;
     private static long _lastDumpTicks;
 
+    /// <summary>
+    /// 是否把对话框子控件树 dump 到磁盘。**默认关闭**。
+    /// ClassifyDialog 会在对话框出现时被调用（EVENT_OBJECT_SHOW 是全系统事件），
+    /// 而 dump 要递归枚举整棵子控件树再同步写盘——常驻开启等于每次弹窗都先付一笔
+    /// 磁盘 IO，直接拖慢悬浮窗的响应。需要核对真实对话框结构时，在 settings.json 里
+    /// 加 "dialogDump": "true" 再重启即可（排障专用，平时不要开）。
+    /// </summary>
+    private static readonly bool DumpEnabled = SettingsStore.Get("dialogDump") == "true";
+
     /// <summary>把对话框的完整子控件树（类名/ID/文本，含空文本控件）写入
-    /// %LocalAppData%\FolderJumpTool\dialog-dump.log，用于核对真实对话框结构。</summary>
+    /// %LocalAppData%\FolderJumpTool\dialog-dump.log，用于核对真实对话框结构。
+    /// 仅当设置里显式打开 dialogDump 时才落盘。</summary>
     private static void DumpStructure(IntPtr hwnd, List<string> btnTexts)
     {
+        if (!DumpEnabled)
+            return;
+
         try
         {
             var now = DateTime.UtcNow.Ticks;

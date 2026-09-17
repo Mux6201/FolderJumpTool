@@ -76,6 +76,14 @@ internal static class ShellIcons
         uint flags = NativeMethods.SHGFI_ICON | NativeMethods.SHGFI_SMALLICON;
         uint attrs = isDirectory ? NativeMethods.FILE_ATTRIBUTE_DIRECTORY : NativeMethods.FILE_ATTRIBUTE_NORMAL;
 
+        // 网络位置（UNC / 映射盘）改用 USEFILEATTRIBUTES：让 Shell 直接按"目录/文件"
+        // 属性返回通用图标，不去访问真实路径。脱机或休眠的对端上，一次 SHGetFileInfo
+        // 会等到 SMB 超时（数秒），而这里是 UI 线程的绑定回调——卡住就是整窗卡住，
+        // 表现正是"文件选择对话框出来了、我们的悬浮窗过几秒才跟出来"。
+        // 代价仅是这类条目显示通用文件夹图标。
+        if (PathUtil.IsNetworkPath(path))
+            flags |= NativeMethods.SHGFI_USEFILEATTRIBUTES;
+
         IntPtr ok;
         try
         {
